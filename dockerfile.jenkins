@@ -1,28 +1,34 @@
 FROM jenkins/jenkins:2.426.1-lts-jdk17
 
-# 1. Switch to root to install utilities and Docker CLI (optional)
 USER root
 
+# Install utilities
 RUN apt-get update && \
     apt-get install -y ca-certificates curl && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# 2. Copy plugins list & install via plugin manager CLI (with version pinning)
-COPY --chown=jenkins:jenkins jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
-RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt \
-    --verbose
+# Fetch update-center certificate and import into the JVM truststore
+RUN mkdir -p /tmp/certs && \
+    openssl s_client -showcerts -connect updates.jenkins.io:443 \
+      </dev/null 2>/dev/null \
+      | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' \
+      > /tmp/certs/jenkins-update-center.pem && \
+    keytool -import -trustcacerts -noprompt \
+      -alias jenkins-update-center \
+      -file /tmp/certs/jenkins-update-center.pem \
+      -keystore $JAVA_HOME/lib/security/cacerts \
+      -storepass changeit
 
-# 3. Configure JCasC environment (point to folder)
+# Copy and install plugins
+COPY --chown=jenkins:jenkins jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt --verbose
+
+# Configure JCasC and disable the setup wizard
 ENV CASC_JENKINS_CONFIG="/var/jenkins/casc_configs"
-# 4. Prevent setup wizard
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
 
-# 5. Provide JCasC config
 COPY --chown=jenkins:jenkins jenkins/casc_configs/jenkins.yaml ${CASC_JENKINS_CONFIG}/jenkins.yaml
 
-# 6. Drop back to unprivileged user
 USER jenkins
-
-# 7. Expose ports (optional if using compose / run CLI)
 EXPOSE 8080 50000
