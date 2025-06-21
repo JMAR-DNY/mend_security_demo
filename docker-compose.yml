@@ -21,7 +21,6 @@ services:
       - ALPINE_CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS
       - ALPINE_CORS_ALLOW_HEADERS=Origin,Content-Type,Authorization,X-Requested-With,Content-Length,Accept,Origin,X-Api-Key
       - ALPINE_CORS_EXPOSE_HEADERS=Content-Type,X-Api-Key
-      # Force API key for demo purposes
       - ALPINE_API_KEY_DEFAULT=odt_0EvOUOJftaK9PHrVIh4yL1LgbAYHLhtJ
     volumes:
       - 'dt-data:/data'
@@ -75,21 +74,20 @@ services:
       timeout: 5s
       retries: 5
 
-  # Jenkins with Runtime Plugin Installation
+  # Jenkins with automatic plugin installation using jenkins-plugin-cli
   jenkins:
     image: jenkins/jenkins:2.426.1-lts-jdk17
     container_name: jenkins
     user: root
     environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g -Djenkins.install.runSetupWizard=false
       - JENKINS_OPTS=--httpPort=8080
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
     volumes:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
       - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
-      - './jenkins/init.groovy.d:/usr/share/jenkins/ref/init.groovy.d:ro'
-      - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro'
+      - './jenkins/plugins.txt:/var/jenkins_home/plugins.txt:ro'
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -105,6 +103,16 @@ services:
     depends_on:
       dependency-track-apiserver:
         condition: service_healthy
+    # Use jenkins-plugin-cli at runtime to avoid SSL build issues
+    entrypoint: >
+      bash -c '
+        if [ ! -f /var/jenkins_home/plugins/.initialized ]; then
+          echo "First run - installing plugins with jenkins-plugin-cli..."
+          jenkins-plugin-cli --plugin-file /var/jenkins_home/plugins.txt --plugins-dir /var/jenkins_home/plugins || echo "Some plugins failed, continuing..."
+          mkdir -p /var/jenkins_home/plugins && touch /var/jenkins_home/plugins/.initialized
+        fi
+        exec /usr/local/bin/jenkins.sh
+      '
 
 volumes:
   dt-data:
