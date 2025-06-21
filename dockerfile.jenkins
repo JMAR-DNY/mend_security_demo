@@ -1,63 +1,28 @@
-FROM jenkins/jenkins:2.426.1-lts
+FROM jenkins/jenkins:2.426.1-lts-jdk17
 
-# Switch to root user to install plugins
+# 1. Switch to root to install utilities and Docker CLI (optional)
 USER root
 
-# Update CA certificates and install curl for troubleshooting
 RUN apt-get update && \
     apt-get install -y ca-certificates curl && \
     update-ca-certificates && \
-    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy plugins.txt file
-COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+# 2. Copy plugins list & install via plugin manager CLI (with version pinning)
+COPY --chown=jenkins:jenkins jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt \
+    --verbose
 
-# Set Jenkins-specific environment variables for plugin installation
-ENV JENKINS_UC_DOWNLOAD=https://updates.jenkins.io
-ENV CURL_OPTIONS="--insecure"
+# 3. Configure JCasC environment (point to folder)
+ENV CASC_JENKINS_CONFIG="/var/jenkins/casc_configs"
+# 4. Prevent setup wizard
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
 
-# Install plugins using jenkins-plugin-cli with SSL workaround
-RUN jenkins-plugin-cli \
-    --plugin-file /usr/share/jenkins/ref/plugins.txt \
-    --verbose \
-    --plugin-download-directory /usr/share/jenkins/ref/plugins \
-    --available-updates \
-    || echo "First attempt failed, trying with individual core plugins..."
+# 5. Provide JCasC config
+COPY --chown=jenkins:jenkins jenkins/casc_configs/jenkins.yaml ${CASC_JENKINS_CONFIG}/jenkins.yaml
 
-# Fallback: Install core plugins individually if batch install fails
-RUN jenkins-plugin-cli \
-    --plugins workflow-aggregator:590.v6a_d052e5a_a_b_5 \
-    --plugins git:5.0.0 \
-    --plugins maven-plugin:3.22 \
-    --plugins dependency-check-jenkins-plugin:5.4.3 \
-    --plugins http_request:1.18 \
-    --plugins configuration-as-code:1670.v564dc8b_982d0 \
-    --plugins job-dsl:1.84 \
-    --plugins credentials:1271.v54b_1c1c6388a_ \
-    --plugins credentials-binding:523.vd859a_4b_122e6 \
-    --verbose \
-    || echo "Individual plugin installation completed with possible issues"
-
-# Alternative approach: Download plugins directly if CLI continues to fail
-RUN if [ ! -f /usr/share/jenkins/ref/plugins/workflow-aggregator.jpi ]; then \
-        echo "CLI failed, downloading plugins directly..." && \
-        mkdir -p /usr/share/jenkins/ref/plugins && \
-        cd /usr/share/jenkins/ref/plugins && \
-        curl -L -o workflow-aggregator.jpi "https://updates.jenkins.io/download/plugins/workflow-aggregator/590.v6a_d052e5a_a_b_5/workflow-aggregator.hpi" || true && \
-        curl -L -o git.jpi "https://updates.jenkins.io/download/plugins/git/5.0.0/git.hpi" || true && \
-        curl -L -o maven-plugin.jpi "https://updates.jenkins.io/download/plugins/maven-plugin/3.22/maven-plugin.hpi" || true && \
-        curl -L -o dependency-check-jenkins-plugin.jpi "https://updates.jenkins.io/download/plugins/dependency-check-jenkins-plugin/5.4.3/dependency-check-jenkins-plugin.hpi" || true && \
-        curl -L -o http_request.jpi "https://updates.jenkins.io/download/plugins/http_request/1.18/http_request.hpi" || true && \
-        curl -L -o configuration-as-code.jpi "https://updates.jenkins.io/download/plugins/configuration-as-code/1670.v564dc8b_982d0/configuration-as-code.hpi" || true && \
-        curl -L -o job-dsl.jpi "https://updates.jenkins.io/download/plugins/job-dsl/1.84/job-dsl.hpi" || true && \
-        curl -L -o credentials.jpi "https://updates.jenkins.io/download/plugins/credentials/1271.v54b_1c1c6388a_/credentials.hpi" || true && \
-        curl -L -o credentials-binding.jpi "https://updates.jenkins.io/download/plugins/credentials-binding/523.vd859a_4b_122e6/credentials-binding.hpi" || true && \
-        echo "Direct download completed"; \
-    fi
-
-# Switch back to jenkins user
+# 6. Drop back to unprivileged user
 USER jenkins
 
-# Skip initial setup wizard
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+# 7. Expose ports (optional if using compose / run CLI)
+EXPOSE 8080 50000
