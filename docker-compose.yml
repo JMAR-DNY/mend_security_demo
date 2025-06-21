@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # OWASP Dependency Track - API Server
   dependency-track-apiserver:
-    image: dependencytrack/apiserver:4.10.1
+    image: dependencytrack/apiserver:latest  # Changed from 4.10.1 to latest
     container_name: dt-apiserver
     environment:
       - ALPINE_DATABASE_MODE=external
@@ -42,7 +42,7 @@ services:
 
   # OWASP Dependency Track - Frontend
   dependency-track-frontend:
-    image: dependencytrack/frontend:4.10.1
+    image: dependencytrack/frontend:latest  # Changed from 4.10.1 to latest
     container_name: dt-frontend
     environment:
       - API_BASE_URL=http://localhost:8081
