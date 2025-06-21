@@ -75,21 +75,20 @@ services:
       timeout: 5s
       retries: 5
 
-  # Jenkins with Custom Build
+  # Standard Jenkins - No Custom Build
   jenkins:
-    build:
-      context: .
-      dockerfile: Dockerfile.jenkins
+    image: jenkins/jenkins:2.426.1-lts
     container_name: jenkins
     user: root
     environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g -Dhudson.model.DirectoryBrowserSupport.CSP="sandbox allow-same-origin allow-scripts; default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g
       - JENKINS_OPTS=--httpPort=8080
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
-      - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
+      - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
+      - './jenkins/plugins.txt:/var/jenkins_home/ref/plugins.txt:ro'
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -101,7 +100,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 180s
+      start_period: 120s
     depends_on:
       dependency-track-apiserver:
         condition: service_healthy
