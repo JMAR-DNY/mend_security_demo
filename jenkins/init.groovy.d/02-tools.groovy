@@ -1,23 +1,8 @@
-// 02-tools.groovy
-#!groovy
 import jenkins.model.*
 import hudson.model.*
 import hudson.tools.*
 
 def instance = Jenkins.getInstance()
-
-try {
-    // Configure Git - use simple approach
-    def gitTool = new hudson.plugins.git.GitTool("Default", "/usr/bin/git", [])
-    def gitDescriptor = instance.getDescriptor("hudson.plugins.git.GitTool")
-    if (gitDescriptor != null) {
-        gitDescriptor.setInstallations(gitTool)
-        gitDescriptor.save()
-        println "Git tool configured successfully"
-    }
-} catch (Exception e) {
-    println "Git tool configuration skipped: ${e.getMessage()}"
-}
 
 try {
     // Configure Maven
@@ -36,5 +21,4 @@ try {
     println "Maven configuration skipped: ${e.getMessage()}"
 }
 
-// Skip Dependency Check tool configuration for now - it will be auto-installed
 println "Tool configuration completed"
