@@ -1,13 +1,54 @@
 FROM jenkins/jenkins:2.426.1-lts
 
-# Switch to root user to install plugins
+# Switch to root user
 USER root
 
-# Copy plugins.txt file
-COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+# Install curl for downloading plugins
+RUN apt-get update && \
+    apt-get install -y curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install plugins using jenkins-plugin-cli (the new official method)
-RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt --verbose
+# Create plugins directory
+RUN mkdir -p /usr/share/jenkins/ref/plugins
+
+# Download essential plugins directly (bypasses jenkins-plugin-cli SSL issues)
+RUN cd /usr/share/jenkins/ref/plugins && \
+    # Pipeline plugins
+    curl -L -o workflow-aggregator.jpi "https://updates.jenkins.io/download/plugins/workflow-aggregator/590.v6a_d052e5a_a_b_5/workflow-aggregator.hpi" && \
+    curl -L -o workflow-job.jpi "https://updates.jenkins.io/download/plugins/workflow-job/1295.v395eb_7400005/workflow-job.hpi" && \
+    curl -L -o workflow-cps.jpi "https://updates.jenkins.io/download/plugins/workflow-cps/3659.v582dc37621d8/workflow-cps.hpi" && \
+    curl -L -o workflow-basic-steps.jpi "https://updates.jenkins.io/download/plugins/workflow-basic-steps/1010.vf7a_b_98e847c1/workflow-basic-steps.hpi" && \
+    curl -L -o workflow-durable-task-step.jpi "https://updates.jenkins.io/download/plugins/workflow-durable-task-step/1289.v4d3e7b_01546b_/workflow-durable-task-step.hpi" && \
+    curl -L -o workflow-scm-step.jpi "https://updates.jenkins.io/download/plugins/workflow-scm-step/415.v434365564324/workflow-scm-step.hpi" && \
+    curl -L -o workflow-support.jpi "https://updates.jenkins.io/download/plugins/workflow-support/865.v43e78cc44e0d/workflow-support.hpi" && \
+    curl -L -o workflow-step-api.jpi "https://updates.jenkins.io/download/plugins/workflow-step-api/639.v6eca_cd8c04a_a_/workflow-step-api.hpi" && \
+    curl -L -o workflow-api.jpi "https://updates.jenkins.io/download/plugins/workflow-api/1271.v54b_1c1c6388a_/workflow-api.hpi" && \
+    # Git integration
+    curl -L -o git.jpi "https://updates.jenkins.io/download/plugins/git/5.0.0/git.hpi" && \
+    curl -L -o git-client.jpi "https://updates.jenkins.io/download/plugins/git-client/4.6.0/git-client.hpi" && \
+    curl -L -o scm-api.jpi "https://updates.jenkins.io/download/plugins/scm-api/676.v886669a_199a_a_/scm-api.hpi" && \
+    # Build tools
+    curl -L -o maven-plugin.jpi "https://updates.jenkins.io/download/plugins/maven-plugin/3.22/maven-plugin.hpi" && \
+    # Security scanning
+    curl -L -o dependency-check-jenkins-plugin.jpi "https://updates.jenkins.io/download/plugins/dependency-check-jenkins-plugin/5.4.3/dependency-check-jenkins-plugin.hpi" && \
+    # API integration
+    curl -L -o http_request.jpi "https://updates.jenkins.io/download/plugins/http_request/1.18/http_request.hpi" && \
+    # Configuration
+    curl -L -o configuration-as-code.jpi "https://updates.jenkins.io/download/plugins/configuration-as-code/1670.v564dc8b_982d0/configuration-as-code.hpi" && \
+    curl -L -o job-dsl.jpi "https://updates.jenkins.io/download/plugins/job-dsl/1.84/job-dsl.hpi" && \
+    # Credentials
+    curl -L -o credentials.jpi "https://updates.jenkins.io/download/plugins/credentials/1271.v54b_1c1c6388a_/credentials.hpi" && \
+    curl -L -o credentials-binding.jpi "https://updates.jenkins.io/download/plugins/credentials-binding/523.vd859a_4b_122e6/credentials-binding.hpi" && \
+    # Core dependencies
+    curl -L -o structs.jpi "https://updates.jenkins.io/download/plugins/structs/324.va_f5d6774f3a_d/structs.hpi" && \
+    curl -L -o script-security.jpi "https://updates.jenkins.io/download/plugins/script-security/1244.ve463715a_f89c/script-security.hpi" && \
+    echo "Plugin download completed"
+
+# Verify downloads
+RUN echo "Verifying plugin downloads..." && \
+    ls -la /usr/share/jenkins/ref/plugins/ && \
+    echo "Total plugins downloaded: $(ls /usr/share/jenkins/ref/plugins/*.jpi | wc -l)"
 
 # Switch back to jenkins user
 USER jenkins
