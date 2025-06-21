@@ -83,6 +83,8 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g
       - JENKINS_OPTS=--httpPort=8080
+      - DT_API_KEY=${DT_API_KEY}
+      - DT_API_URL=${DT_API_URL}
     volumes:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
