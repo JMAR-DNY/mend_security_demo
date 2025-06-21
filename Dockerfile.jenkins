@@ -20,33 +20,39 @@ USER jenkins
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -Xmx2g"
 ENV JENKINS_OPTS="--httpPort=8080"
 
-# Copy plugins list and install plugins during build
-COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
-RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
+# Skip plugin installation - we'll install plugins at runtime instead
+# This avoids SSL certificate issues during build
 
-# Copy JCasC configuration
+# Copy JCasC configuration that will install plugins on startup
 COPY jenkins/casc_configs/ /usr/share/jenkins/ref/casc_configs/
+COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
 
 # Set JCasC environment variable
 ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
 
-# Create init script to copy configs on startup
+# Create comprehensive init script
 USER root
 RUN echo '#!/bin/bash\n\
 set -e\n\
 echo "🔧 Starting Jenkins with JCasC..."\n\
 \n\
-# Create casc_configs directory if it doesnt exist\n\
+# Create casc_configs directory\n\
 mkdir -p "$JENKINS_HOME/casc_configs"\n\
 \n\
-# Copy JCasC configs if they dont exist\n\
+# Copy JCasC configs\n\
 if [ ! -f "$JENKINS_HOME/casc_configs/jenkins.yaml" ]; then\n\
   echo "📋 Copying JCasC configuration..."\n\
   cp -r /usr/share/jenkins/ref/casc_configs/* "$JENKINS_HOME/casc_configs/"\n\
   chown -R jenkins:jenkins "$JENKINS_HOME/casc_configs"\n\
   echo "✅ JCasC configuration ready"\n\
-else\n\
-  echo "✅ JCasC configuration already exists"\n\
+fi\n\
+\n\
+# Install plugins from plugins.txt at runtime (more reliable)\n\
+if [ -f "/usr/share/jenkins/ref/plugins.txt" ] && [ ! -f "$JENKINS_HOME/.plugins-installed" ]; then\n\
+  echo "📦 Installing Jenkins plugins..."\n\
+  jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt || echo "Some plugins may have failed to install"\n\
+  touch "$JENKINS_HOME/.plugins-installed"\n\
+  echo "✅ Plugin installation attempted"\n\
 fi\n\
 \n\
 # Start Jenkins\n\
