@@ -1,5 +1,4 @@
-# jenkins/plugins.txt - Comprehensive plugin list for JCasC setup
-
+# Essential plugins for Mend Security Demo
 # Core Jenkins plugins
 ant:475.vf34069fef73c
 build-timeout:1.30
@@ -8,7 +7,7 @@ ssh-credentials:308.ve4497b_ccd8f4
 plain-credentials:143.v1b_df8b_d3b_e48
 credentials-binding:523.vd859a_4b_122e6
 
-# Workflow/Pipeline plugins
+# Workflow/Pipeline plugins (REQUIRED for pipeline jobs)
 workflow-step-api:639.v6eca_cd8c04a_a_
 workflow-api:1271.v54b_1c1c6388a_
 workflow-support:865.v43e78cc44e0d
@@ -28,12 +27,12 @@ pipeline-graph-analysis:195.v5812d95a_a_2f9
 pipeline-rest-api:2.33
 pipeline-stage-view:2.33
 
-# Git and SCM plugins
+# Git and SCM plugins (REQUIRED)
 git:5.0.0
 git-client:4.6.0
 scm-api:676.v886669a_199a_a_
 
-# Configuration as Code
+# Configuration as Code (REQUIRED)
 configuration-as-code:1670.v564dc8b_982d0
 
 # Build and utility plugins
@@ -44,14 +43,18 @@ pipeline-utility-steps:2.16.0
 # Security and authentication
 matrix-auth:3.2.1
 
-# HTTP and API plugins
+# HTTP and API plugins (REQUIRED for Dependency Track integration)
 http_request:1.18
 
-# Build tools
+# Build tools (REQUIRED)
 maven-plugin:3.22
 
-# Dependency management (for future OWASP Dependency Check integration)
+# Dependency management (REQUIRED for OWASP Dependency Check)
 dependency-check-jenkins-plugin:5.4.3
 
-# Job DSL (for programmatic job creation)
+# Job DSL (REQUIRED for programmatic job creation)
 job-dsl:1.84
+
+# Additional utility plugins
+structs:324.va_f5d6774f3a_d
+script-security:1244.ve463715a_f89c

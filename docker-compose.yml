@@ -75,7 +75,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Standard Jenkins - No Custom Build
+  # Jenkins with Runtime Plugin Installation
   jenkins:
     image: jenkins/jenkins:2.426.1-lts
     container_name: jenkins
@@ -88,7 +88,7 @@ services:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
       - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
-      - './jenkins/plugins.txt:/var/jenkins_home/ref/plugins.txt:ro'
+      - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro'
     ports:
       - "8080:8080"
       - "50000:50000"
