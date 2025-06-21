@@ -75,21 +75,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # Jenkins with Custom Dockerfile for Plugin Installation
+  # Jenkins with Runtime Plugin Installation
   jenkins:
-    build:
-      context: .
-      dockerfile: Dockerfile.jenkins
+    image: jenkins/jenkins:2.426.1-lts-jdk17
     container_name: jenkins
     user: root
     environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true
       - JENKINS_OPTS=--httpPort=8080
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
     volumes:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
       - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
+      - './jenkins/init.groovy.d:/usr/share/jenkins/ref/init.groovy.d:ro'
+      - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro'
     ports:
       - "8080:8080"
       - "50000:50000"
