@@ -1,0 +1,67 @@
+FROM jenkins/jenkins:2.426.1-lts
+
+# Switch to root for installations
+USER root
+
+# Install system dependencies including Maven
+RUN apt-get update && apt-get install -y \
+    maven \
+    xmlstarlet \
+    curl \
+    wget \
+    unzip \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN curl -fsSL https://get.docker.com -o get-docker.sh && \
+    sh get-docker.sh && \
+    rm get-docker.sh
+
+# Switch back to jenkins user
+USER jenkins
+
+# Disable setup wizard
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -Xmx2g"
+ENV JENKINS_OPTS="--httpPort=8080"
+
+# Copy plugins list and install plugins during build
+COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
+
+# Copy JCasC configuration
+COPY jenkins/casc_configs/ /usr/share/jenkins/ref/casc_configs/
+
+# Set JCasC environment variable
+ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
+
+# Create init script to copy configs on startup
+USER root
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "🔧 Starting Jenkins with JCasC..."\n\
+\n\
+# Create casc_configs directory if it doesnt exist\n\
+mkdir -p "$JENKINS_HOME/casc_configs"\n\
+\n\
+# Copy JCasC configs if they dont exist\n\
+if [ ! -f "$JENKINS_HOME/casc_configs/jenkins.yaml" ]; then\n\
+  echo "📋 Copying JCasC configuration..."\n\
+  cp -r /usr/share/jenkins/ref/casc_configs/* "$JENKINS_HOME/casc_configs/"\n\
+  chown -R jenkins:jenkins "$JENKINS_HOME/casc_configs"\n\
+  echo "✅ JCasC configuration ready"\n\
+else\n\
+  echo "✅ JCasC configuration already exists"\n\
+fi\n\
+\n\
+# Start Jenkins\n\
+echo "🚀 Starting Jenkins..."\n\
+exec /sbin/tini -- /usr/local/bin/jenkins.sh "$@"' > /usr/local/bin/jenkins-with-jcasc.sh
+
+RUN chmod +x /usr/local/bin/jenkins-with-jcasc.sh
+
+# Switch back to jenkins user
+USER jenkins
+
+# Use the custom entrypoint
+ENTRYPOINT ["/usr/local/bin/jenkins-with-jcasc.sh"]

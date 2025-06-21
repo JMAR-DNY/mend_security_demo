@@ -1,12 +1,13 @@
-.PHONY: help setup start stop restart logs clean demo health-check status
+.PHONY: help setup start stop restart logs clean demo health-check status rebuild
 
 help:
 	@echo "🔧 Mend Security Demo - Available Commands:"
 	@echo ""
-	@echo "  setup        - Complete setup with Jenkins Configuration as Code"
+	@echo "  setup        - Complete setup with custom Jenkins image (first time: 15-20 min)"
 	@echo "  start        - Start all services"
 	@echo "  stop         - Stop all services"
 	@echo "  restart      - Restart all services"
+	@echo "  rebuild      - Rebuild Jenkins image and restart services"
 	@echo "  logs         - Show logs from all services"
 	@echo "  clean        - Stop and remove all containers and volumes"
 	@echo "  demo         - Instructions for running the security scan demo"
@@ -14,13 +15,20 @@ help:
 	@echo "  status       - Show current status of all services"
 	@echo ""
 	@echo "🚀 Quick Start:"
-	@echo "  1. make setup    (initial setup - takes 10-15 minutes)"
+	@echo "  1. make setup    (builds custom Jenkins image with plugins & jobs)"
 	@echo "  2. make demo     (run the demonstration)"
+	@echo ""
+	@echo "📋 First-time Setup Notes:"
+	@echo "  • Custom Jenkins image build: ~5-10 minutes"
+	@echo "  • Service initialization: ~5-10 minutes"
+	@echo "  • Total time: 15-20 minutes on first run"
+	@echo "  • Subsequent starts: ~2-3 minutes"
 	@echo ""
 
 setup:
-	@echo "🚀 Setting up Mend Security Demo with Jenkins Configuration as Code..."
-	@echo "⏰ This will take 10-15 minutes on first run..."
+	@echo "🚀 Setting up Mend Security Demo with custom Jenkins image..."
+	@echo "⏰ This will take 15-20 minutes on first run (builds custom Jenkins image)"
+	@echo "⚡ Subsequent runs will be much faster (2-3 minutes)"
 	cp .env.example .env 2>/dev/null || echo "Using existing .env"
 	chmod +x scripts/*.sh 2>/dev/null || echo "Scripts already executable"
 	./scripts/setup.sh
@@ -39,6 +47,12 @@ restart:
 	docker-compose restart
 	@echo "✅ Services restarted"
 
+rebuild:
+	@echo "🏗️ Rebuilding Jenkins image and restarting services..."
+	docker-compose down
+	docker-compose up -d --build
+	@echo "✅ Jenkins image rebuilt and services restarted"
+
 logs:
 	@echo "📋 Showing logs from all services (Ctrl+C to exit)..."
 	docker-compose logs -f
@@ -51,6 +65,7 @@ clean:
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		docker-compose down -v --remove-orphans; \
 		docker system prune -f; \
+		docker rmi mend-security-demo-clone_jenkins 2>/dev/null || echo "Custom Jenkins image already removed"; \
 		echo "✅ Cleanup complete"; \
 	else \
 		echo "❌ Cleanup cancelled"; \
@@ -86,6 +101,7 @@ demo:
 	@echo "   ✓ Centralized vulnerability management with Dependency Track"
 	@echo "   ✓ Industry-standard SBOM generation (CycloneDX format)"
 	@echo "   ✓ Continuous monitoring and risk assessment"
+	@echo "   ✓ Infrastructure as Code (Jenkins configs version-controlled)"
 	@echo ""
 	@echo "🎯 Expected Demo Outcomes:"
 	@echo "   • WebGoat vulnerabilities detected and cataloged"
@@ -94,6 +110,12 @@ demo:
 	@echo "   • Executive dashboards and reporting available"
 	@echo ""
 	@echo "⏱️  Demo Runtime: ~3-5 minutes for full pipeline execution"
+	@echo ""
+	@echo "🏆 Technical Excellence Demonstrated:"
+	@echo "   • Custom Jenkins image with pre-installed plugins"
+	@echo "   • Jenkins Configuration as Code (JCasC)"
+	@echo "   • Automated container orchestration"
+	@echo "   • Production-ready security scanning workflow"
 	@echo ""
 
 health-check:
@@ -112,8 +134,15 @@ status:
 	@curl -s -f http://localhost:8080/login >/dev/null 2>&1 && echo "✅ Ready" || echo "❌ Not Ready"
 	@echo -n "   Dependency Track: "
 	@curl -s -f http://localhost:8081/api/version >/dev/null 2>&1 && echo "✅ Ready" || echo "❌ Not Ready"
+	@echo -n "   Jenkins Job: "
+	@curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null | grep -q "name" && echo "✅ Created" || echo "⚠️ Pending/Missing"
 	@echo ""
 	@echo "🌐 Service URLs:"
 	@echo "   Jenkins:          http://localhost:8080"
 	@echo "   Dependency Track: http://localhost:8081"
 	@echo "   DT Frontend:      http://localhost:8082"
+	@echo ""
+	@echo "🔧 If services aren't ready:"
+	@echo "   • Wait a few more minutes for initialization"
+	@echo "   • Check logs: make logs"
+	@echo "   • Restart services: make restart"

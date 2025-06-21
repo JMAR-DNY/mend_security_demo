@@ -14,9 +14,13 @@ mkdir -p jenkins/casc_configs
 mkdir -p workspace
 mkdir -p reports
 
-# Create JCasC configuration file
-echo "⚙️ Creating Jenkins Configuration as Code setup..."
-cat > jenkins/casc_configs/jenkins.yaml << 'EOF'
+# Ensure all required files exist
+echo "🔍 Verifying required configuration files..."
+
+# Create JCasC configuration if it doesn't exist
+if [ ! -f "jenkins/casc_configs/jenkins.yaml" ]; then
+    echo "📝 Creating Jenkins Configuration as Code setup..."
+    cat > jenkins/casc_configs/jenkins.yaml << 'EOF'
 jenkins:
   systemMessage: "Mend Security Demo - Jenkins with Auto-Configured Pipeline"
   numExecutors: 2
@@ -354,10 +358,14 @@ unclassified:
     adminAddress: "admin@mend-demo.local"
     url: "http://localhost:8080/"
 EOF
+else
+    echo "✅ JCasC configuration already exists"
+fi
 
-# Create comprehensive plugins list
-echo "📦 Creating Jenkins plugins configuration..."
-cat > jenkins/plugins.txt << 'EOF'
+# Create plugins.txt if it doesn't exist
+if [ ! -f "jenkins/plugins.txt" ]; then
+    echo "📦 Creating Jenkins plugins configuration..."
+    cat > jenkins/plugins.txt << 'EOF'
 # Core Jenkins functionality
 ant:475.vf34069fef73c
 build-timeout:1.30
@@ -409,10 +417,90 @@ maven-plugin:3.22
 # Job creation and management
 job-dsl:1.84
 EOF
+else
+    echo "✅ Jenkins plugins configuration already exists"
+fi
 
-# Start services
-echo "🐳 Starting Docker services with JCasC configuration..."
-docker-compose up -d
+# Create Dockerfile.jenkins if it doesn't exist
+if [ ! -f "Dockerfile.jenkins" ]; then
+    echo "🐳 Creating Jenkins Dockerfile..."
+    cat > Dockerfile.jenkins << 'EOF'
+FROM jenkins/jenkins:2.426.1-lts
+
+# Switch to root for installations
+USER root
+
+# Install system dependencies including Maven
+RUN apt-get update && apt-get install -y \
+    maven \
+    xmlstarlet \
+    curl \
+    wget \
+    unzip \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN curl -fsSL https://get.docker.com -o get-docker.sh && \
+    sh get-docker.sh && \
+    rm get-docker.sh
+
+# Switch back to jenkins user
+USER jenkins
+
+# Disable setup wizard
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -Xmx2g"
+ENV JENKINS_OPTS="--httpPort=8080"
+
+# Copy plugins list and install plugins during build
+COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
+
+# Copy JCasC configuration
+COPY jenkins/casc_configs/ /usr/share/jenkins/ref/casc_configs/
+
+# Set JCasC environment variable
+ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
+
+# Create init script to copy configs on startup
+USER root
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "🔧 Starting Jenkins with JCasC..."\n\
+\n\
+# Create casc_configs directory if it doesnt exist\n\
+mkdir -p "$JENKINS_HOME/casc_configs"\n\
+\n\
+# Copy JCasC configs if they dont exist\n\
+if [ ! -f "$JENKINS_HOME/casc_configs/jenkins.yaml" ]; then\n\
+  echo "📋 Copying JCasC configuration..."\n\
+  cp -r /usr/share/jenkins/ref/casc_configs/* "$JENKINS_HOME/casc_configs/"\n\
+  chown -R jenkins:jenkins "$JENKINS_HOME/casc_configs"\n\
+  echo "✅ JCasC configuration ready"\n\
+else\n\
+  echo "✅ JCasC configuration already exists"\n\
+fi\n\
+\n\
+# Start Jenkins\n\
+echo "🚀 Starting Jenkins..."\n\
+exec /sbin/tini -- /usr/local/bin/jenkins.sh "$@"' > /usr/local/bin/jenkins-with-jcasc.sh
+
+RUN chmod +x /usr/local/bin/jenkins-with-jcasc.sh
+
+# Switch back to jenkins user
+USER jenkins
+
+# Use the custom entrypoint
+ENTRYPOINT ["/usr/local/bin/jenkins-with-jcasc.sh"]
+EOF
+else
+    echo "✅ Jenkins Dockerfile already exists"
+fi
+
+# Start services with build
+echo "🏗️ Building custom Jenkins image and starting all services..."
+echo "   (This will take 5-10 minutes on first run to build the Jenkins image)"
+docker-compose up -d --build
 
 # Function to check service health
 check_service() {
@@ -438,7 +526,7 @@ check_service() {
 
 # Wait for services to start
 echo "🔄 Waiting for all services to initialize..."
-echo "   This may take 5-10 minutes on first run..."
+echo "   This may take 10-15 minutes on first run..."
 
 # Wait for PostgreSQL
 echo "🗄️ Waiting for PostgreSQL database..."
@@ -457,17 +545,33 @@ check_service "Jenkins" 8080
 
 # Give Jenkins extra time to process JCasC configuration
 echo "⚙️ Allowing time for Jenkins Configuration as Code to complete..."
-sleep 45
+sleep 60
+
+# Verify plugins are installed
+echo "🔍 Verifying plugin installation..."
+PLUGIN_CHECK=""
+for i in {1..10}; do
+    PLUGIN_CHECK=$(curl -s -u admin:admin http://localhost:8080/pluginManager/api/json?depth=1 2>/dev/null || echo "")
+    if [[ $PLUGIN_CHECK == *"plugins"* ]]; then
+        echo "✅ Jenkins plugins are installed and loaded"
+        break
+    fi
+    echo "   Attempt $i/10 - Plugins still loading..."
+    sleep 15
+done
 
 # Verify job was created
 echo "🔍 Verifying Jenkins job creation..."
-JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null || echo "")
-if [[ $JOB_CHECK == *"name"* ]]; then
-    echo "✅ Jenkins job 'webgoat-security-scan' created successfully via JCasC"
-else
-    echo "⚠️ Jenkins job creation pending - may need a few more minutes"
-    echo "   Job will be available after JCasC fully processes the configuration"
-fi
+JOB_CHECK=""
+for i in {1..10}; do
+    JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null || echo "")
+    if [[ $JOB_CHECK == *"name"* ]]; then
+        echo "✅ Jenkins job 'webgoat-security-scan' created successfully via JCasC"
+        break
+    fi
+    echo "   Attempt $i/10 - Job creation pending..."
+    sleep 15
+done
 
 # Get Dependency Track information
 echo "🔑 Checking Dependency Track setup..."
@@ -486,6 +590,28 @@ echo "🎯 Performing final system verification..."
 # Check all containers are running
 echo "📊 Container Status:"
 docker-compose ps
+
+# Verify critical components
+echo ""
+echo "🔍 System Health Check:"
+echo -n "   PostgreSQL: "
+docker exec dt-postgres pg_isready -U dtrack 2>/dev/null && echo "✅ Ready" || echo "❌ Not Ready"
+echo -n "   Jenkins: "
+curl -s -f http://localhost:8080/login >/dev/null 2>&1 && echo "✅ Ready" || echo "❌ Not Ready"
+echo -n "   Dependency Track: "
+curl -s -f http://localhost:8081/api/version >/dev/null 2>&1 && echo "✅ Ready" || echo "❌ Not Ready"
+echo -n "   Jenkins Job: "
+if [[ $JOB_CHECK == *"name"* ]]; then
+    echo "✅ Created"
+else
+    echo "⚠️ Pending"
+fi
+echo -n "   Jenkins Plugins: "
+if [[ $PLUGIN_CHECK == *"plugins"* ]]; then
+    echo "✅ Installed"
+else
+    echo "⚠️ Loading"
+fi
 
 echo ""
 echo "✅ 🎉 SETUP COMPLETE! 🎉"
@@ -510,9 +636,15 @@ echo "   ✓ Generate Software Bill of Materials (SBOM)"
 echo "   ✓ Upload security data to Dependency Track"
 echo ""
 echo "🔧 Troubleshooting:"
-echo "   • If job doesn't appear: wait 2-3 minutes and refresh"
+echo "   • If job doesn't appear: wait 2-3 minutes and refresh Jenkins"
 echo "   • Check logs: docker-compose logs [service-name]"
 echo "   • Health check: make health-check"
 echo "   • Reset: make clean && make setup"
 echo ""
 echo "🎬 The demo is now ready for presentation!"
+echo ""
+echo "💡 Pro Tips:"
+echo "   • All plugins are pre-installed in the custom Jenkins image"
+echo "   • JCasC configuration is embedded and loads automatically"
+echo "   • API keys are pre-configured for seamless demo experience"
+echo "   • Repository is fully self-contained and reproducible" "
