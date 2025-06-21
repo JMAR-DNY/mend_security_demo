@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Setting up Mend Security Demo with Official Jenkins Plugin Pre-installation..."
+echo "🚀 Setting up Mend Security Demo with Custom Jenkins Image..."
 
 # Check prerequisites
 echo "📋 Checking prerequisites..."
@@ -17,24 +17,30 @@ mkdir -p reports
 # Make scripts executable
 chmod +x scripts/*.sh 2>/dev/null || echo "Scripts already executable"
 
-# Verify plugins.txt exists
+# Verify required files exist
 if [ ! -f "jenkins/plugins.txt" ]; then
     echo "❌ jenkins/plugins.txt not found. Please create it with the required plugins."
     exit 1
 fi
 
-echo "✅ plugins.txt found with $(wc -l < jenkins/plugins.txt) plugin entries"
+if [ ! -f "Dockerfile.jenkins" ]; then
+    echo "❌ Dockerfile.jenkins not found. Please create it for custom Jenkins image."
+    exit 1
+fi
 
-# Start services - Jenkins will automatically install plugins on startup
-echo "🐳 Starting Docker services..."
-echo "⏰ Jenkins will install plugins during startup (3-5 minutes)..."
-docker-compose up -d
+echo "✅ Required files found"
+echo "   plugins.txt: $(wc -l < jenkins/plugins.txt) plugin entries"
+
+# Build and start services
+echo "🐳 Building custom Jenkins image and starting services..."
+echo "⏰ This will take 5-10 minutes for first build (downloads and installs plugins)..."
+docker-compose up -d --build
 
 # Function to check service health
 check_service() {
     local service_name=$1
     local port=$2
-    local max_attempts=40  # Longer timeout for plugin installation
+    local max_attempts=40  # Longer timeout for custom build
     local attempt=1
     
     echo "⏳ Waiting for $service_name to be ready..."
@@ -48,7 +54,7 @@ check_service() {
         if [ $((attempt % 5)) -eq 0 ]; then
             echo "   Attempt $attempt/$max_attempts - still waiting..."
             if [ "$service_name" = "Jenkins" ] && [ $attempt -ge 10 ]; then
-                echo "   Jenkins is likely installing plugins (this is normal)..."
+                echo "   Custom Jenkins image may still be building or starting..."
             fi
         fi
         
@@ -71,9 +77,9 @@ sleep 15
 echo "🛡️ Waiting for Dependency Track API..."
 check_service "Dependency Track API" 8081
 
-# Jenkins (will take longer due to plugin installation)
-echo "🔧 Waiting for Jenkins (including plugin installation)..."
-echo "   This may take 5-8 minutes as Jenkins downloads and installs all plugins..."
+# Jenkins (will take longer due to custom image build)
+echo "🔧 Waiting for custom Jenkins image to build and start..."
+echo "   This includes building the image with plugins pre-installed..."
 check_service "Jenkins" 8080
 
 # Verify plugin installation
@@ -96,12 +102,12 @@ done
 
 echo "📊 Plugin Installation: $installed_count/${#ESSENTIAL_PLUGINS[@]} essential plugins installed"
 
-if [ $installed_count -ge 5 ]; then
-    echo "✅ Sufficient plugins installed for full demo functionality"
-elif [ $installed_count -ge 3 ]; then
-    echo "⚠️ Partial plugin installation - basic demo functionality available"
+if [ $installed_count -ge 6 ]; then
+    echo "✅ Excellent! All essential plugins installed successfully"
+elif [ $installed_count -ge 4 ]; then
+    echo "✅ Good! Sufficient plugins installed for demo functionality"
 else
-    echo "❌ Insufficient plugins installed - manual installation may be required"
+    echo "⚠️ Some plugins missing - check Dockerfile.jenkins and plugins.txt"
 fi
 
 # Give Jenkins time to process JCasC and create jobs
@@ -116,7 +122,7 @@ if [ -n "$JOB_CHECK" ]; then
     echo "✅ WebGoat security scan pipeline job created successfully via JCasC"
 else
     echo "⚠️ Pipeline job not automatically created"
-    echo "   This is normal if Job DSL plugin needs more time to process"
+    echo "   This can happen if Job DSL plugin needs more time to process"
     echo "   Job can be created manually or via JCasC reload"
 fi
 
@@ -171,17 +177,21 @@ echo "   5. Monitor pipeline execution in real-time"
 echo "   6. Review results in Dependency Track: http://localhost:8081"
 echo ""
 echo "⚡ What Was Automated:"
-echo "   ✓ Official Jenkins plugin pre-installation (no runtime issues)"
-echo "   ✓ All required plugins installed during container startup"
+echo "   ✓ Custom Jenkins image with plugins pre-installed via jenkins-plugin-cli"
+echo "   ✓ No runtime installation complexity or CSRF issues"
 echo "   ✓ Jenkins Configuration as Code for pipeline creation"
 echo "   ✓ Complete Mend security workflow ready"
 echo ""
-echo "💡 If Pipeline Job Missing:"
-echo "   • Plugins may still be processing (wait 2-3 minutes)"
-echo "   • Go to Jenkins → Manage Jenkins → Configuration as Code → Reload existing configuration"
-echo "   • Check 'make verify-plugins' to confirm plugin installation"
+if [ $installed_count -lt 6 ]; then
+    echo "💡 If Some Plugins Missing:"
+    echo "   • Check docker build logs: docker-compose logs jenkins"
+    echo "   • Verify plugins.txt format and plugin names"
+    echo "   • Rebuild image: docker-compose up -d --build"
+fi
 echo ""
-echo "⏱️ Total Setup Time: ~8-12 minutes (including plugin installation)"
+echo "⏱️ Total Setup Time: ~10-15 minutes (including custom image build)"
+echo "   • Image build with plugins: 5-8 minutes (first time only)"
 echo "   • Container startup: 2-3 minutes"
-echo "   • Plugin installation: 3-5 minutes" 
 echo "   • Service initialization: 2-3 minutes"
+echo ""
+echo "🚀 Subsequent runs will be much faster (2-3 minutes) as image is cached!"

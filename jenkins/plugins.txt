@@ -1,63 +1,56 @@
-# Official Jenkins plugins.txt for pre-installation
-# Format: plugin-id:version or plugin-id (for latest)
+# Essential plugins for Mend Security Demo
+# Using plugin short names (jenkins-plugin-cli format)
 
-# Essential Pipeline Support
-workflow-aggregator:590.v6a_d052e5a_a_b_5
-workflow-job:1295.v395eb_7400005
-workflow-cps:3659.v582dc37621d8
-workflow-basic-steps:1010.vf7a_b_98e847c1
-workflow-durable-task-step:1289.v4d3e7b_01546b_
-workflow-scm-step:415.v434365564324
-workflow-support:865.v43e78cc44e0d
-workflow-step-api:639.v6eca_cd8c04a_a_
-workflow-api:1271.v54b_1c1c6388a_
-
-# Pipeline UI
-pipeline-stage-view:2.33
-pipeline-rest-api:2.33
-pipeline-graph-analysis:195.v5812d95a_a_2f9
+# Pipeline Support
+workflow-aggregator
+workflow-job
+workflow-cps
+workflow-basic-steps
+workflow-durable-task-step
+workflow-scm-step
+workflow-support
+workflow-step-api
+workflow-api
+pipeline-stage-view
+pipeline-rest-api
+pipeline-graph-analysis
 
 # Git Integration
-git:5.0.0
-git-client:4.6.0
-scm-api:676.v886669a_199a_a_
+git
+git-client
+scm-api
 
 # Build Tools
-maven-plugin:3.22
-ant:475.vf34069fef73c
+maven-plugin
+ant
 
 # Security Scanning (REQUIRED for Mend demo)
-dependency-check-jenkins-plugin:5.4.3
+dependency-check-jenkins-plugin
 
 # API Integration (REQUIRED for Dependency Track)
-http_request:1.18
+http_request
 
 # Utility Plugins
-pipeline-utility-steps:2.16.0
-timestamper:1.25
-workspace-cleanup:0.45
-build-timeout:1.30
+pipeline-utility-steps
+timestamper
+workspace-cleanup
+build-timeout
 
 # Configuration as Code (REQUIRED)
-configuration-as-code:1670.v564dc8b_982d0
+configuration-as-code
 
 # Job DSL (REQUIRED for pipeline creation)
-job-dsl:1.84
+job-dsl
 
 # Credentials Management
-credentials:1271.v54b_1c1c6388a_
-credentials-binding:523.vd859a_4b_122e6
-ssh-credentials:308.ve4497b_ccd8f4
-plain-credentials:143.v1b_df8b_d3b_e48
+credentials
+credentials-binding
+ssh-credentials
+plain-credentials
 
 # Security
-matrix-auth:3.2.1
+matrix-auth
 
 # Core Dependencies
-structs:324.va_f5d6774f3a_d
-script-security:1244.ve463715a_f89c
-
-# Additional Support
-jackson2-api:2.15.2-350.v0c2f3f8fc595
-commons-lang3-api:3.12.0-36.vd97de6465d5b_
-apache-httpcomponents-client-4-api:4.5.14-150.v7a_b_9d17134a_5
+structs
+script-security

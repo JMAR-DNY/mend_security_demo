@@ -75,9 +75,11 @@ services:
       timeout: 5s
       retries: 5
 
-  # Jenkins with Official Plugin Pre-installation
+  # Jenkins with Custom Dockerfile for Plugin Installation
   jenkins:
-    image: jenkins/jenkins:2.426.1-lts
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
     container_name: jenkins
     user: root
     environment:
@@ -88,8 +90,6 @@ services:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
       - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
-      # Official method: Mount plugins.txt to the correct location
-      - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro'
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -101,7 +101,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 180s  # Longer startup time for plugin installation
+      start_period: 180s
     depends_on:
       dependency-track-apiserver:
         condition: service_healthy
