@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # OWASP Dependency Track - API Server
   dependency-track-apiserver:
-    image: dependencytrack/apiserver:latest  # Changed from 4.10.1 to latest
+    image: dependencytrack/apiserver:latest
     container_name: dt-apiserver
     environment:
       - ALPINE_DATABASE_MODE=external
@@ -19,10 +19,12 @@ services:
       - ALPINE_SECRET_KEY_PATH=/var/run/secrets
       - ALPINE_DATA_DIRECTORY=/data
       - ALPINE_CORS_ENABLED=true
-      - ALPINE_CORS_ALLOW_ORIGIN=http://localhost:8081
+      - ALPINE_CORS_ALLOW_ORIGIN=*
       - ALPINE_CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS
       - ALPINE_CORS_ALLOW_HEADERS=Origin,Content-Type,Authorization,X-Requested-With,Content-Length,Accept,Origin,X-Api-Key
       - ALPINE_CORS_EXPOSE_HEADERS=Content-Type,X-Api-Key
+      # Force API key for demo purposes
+      - ALPINE_API_KEY_DEFAULT=odt_0EvOUOJftaK9PHrVIh4yL1LgbAYHLhtJ
     volumes:
       - 'dt-data:/data'
       - 'dt-tmp:/tmp'
@@ -30,19 +32,20 @@ services:
       - "8081:8080"
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - mend-network
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/api/version || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 180s
 
   # OWASP Dependency Track - Frontend
   dependency-track-frontend:
-    image: dependencytrack/frontend:latest  # Changed from 4.10.1 to latest
+    image: dependencytrack/frontend:latest
     container_name: dt-frontend
     environment:
       - API_BASE_URL=http://localhost:8081
@@ -74,23 +77,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # Jenkins
+  # Jenkins with JCasC
   jenkins:
     image: jenkins/jenkins:2.426.1-lts
     container_name: jenkins
     user: root
     environment:
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g -Dhudson.model.DirectoryBrowserSupport.CSP="sandbox allow-same-origin allow-scripts; default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
       - JENKINS_OPTS=--httpPort=8080
-      - DT_API_KEY=${DT_API_KEY}
-      - DT_API_URL=${DT_API_URL}
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
+      - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
-      - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt'
-      - './jenkins/init.groovy.d:/usr/share/jenkins/ref/init.groovy.d'
-      - './jenkins/jobs:/usr/share/jenkins/ref/jobs'
+      - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
+      - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro'
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -101,21 +102,11 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/login || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  # Maven for building (optional helper container)
-  maven:
-    image: maven:3.9.5-openjdk-11
-    container_name: maven-helper
-    volumes:
-      - 'maven-repo:/root/.m2'
-      - './workspace:/workspace'
-    working_dir: /workspace
-    networks:
-      - mend-network
-    profiles:
-      - tools
+      retries: 10
+      start_period: 120s
+    depends_on:
+      dependency-track-apiserver:
+        condition: service_healthy
 
 volumes:
   dt-data:
@@ -125,8 +116,6 @@ volumes:
   postgres-data:
     driver: local
   jenkins-data:
-    driver: local
-  maven-repo:
     driver: local
 
 networks:

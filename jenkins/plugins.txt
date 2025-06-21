@@ -1,44 +1,57 @@
-# Base plugins first
-ant:1.13
-build-timeout:1.27
-credentials:2.6.1
-ssh-credentials:1.19
-plain-credentials:1.8
-credentials-binding:1.27
+# jenkins/plugins.txt - Comprehensive plugin list for JCasC setup
 
-# Core workflow plugins - specific versions
-workflow-step-api:2.24
-workflow-api:2.47
-workflow-support:3.8
-workflow-scm-step:2.13
-workflow-job:2.40
-workflow-durable-task-step:2.41
-workflow-cps-global-lib:2.24
-workflow-cps:2.92
-workflow-basic-steps:2.24
-workflow-aggregator:2.6
+# Core Jenkins plugins
+ant:475.vf34069fef73c
+build-timeout:1.30
+credentials:1271.v54b_1c1c6388a_
+ssh-credentials:308.ve4497b_ccd8f4
+plain-credentials:143.v1b_df8b_d3b_e48
+credentials-binding:523.vd859a_4b_122e6
 
-# Pipeline support
-pipeline-input-step:2.12
-pipeline-milestone-step:1.3.2
-pipeline-stage-step:2.5
-pipeline-graph-analysis:1.12
-pipeline-rest-api:2.24
-pipeline-stage-view:2.25
+# Workflow/Pipeline plugins
+workflow-step-api:639.v6eca_cd8c04a_a_
+workflow-api:1271.v54b_1c1c6388a_
+workflow-support:865.v43e78cc44e0d
+workflow-scm-step:415.v434365564324
+workflow-job:1295.v395eb_7400005
+workflow-durable-task-step:1289.v4d3e7b_01546b_
+workflow-cps-global-lib:588.v576c103a_ff86
+workflow-cps:3659.v582dc37621d8
+workflow-basic-steps:1010.vf7a_b_98e847c1
+workflow-aggregator:590.v6a_d052e5a_a_b_5
 
-# Git and SCM
-git:4.15.0
-git-client:3.13.0
-scm-api:2.6.6
+# Pipeline support plugins
+pipeline-input-step:448.v37cea_9a_10a_70
+pipeline-milestone-step:111.v449306f708b_7
+pipeline-stage-step:305.ve96d0205c1c6
+pipeline-graph-analysis:195.v5812d95a_a_2f9
+pipeline-rest-api:2.33
+pipeline-stage-view:2.33
+
+# Git and SCM plugins
+git:5.0.0
+git-client:4.6.0
+scm-api:676.v886669a_199a_a_
+
+# Configuration as Code
+configuration-as-code:1670.v564dc8b_982d0
 
 # Build and utility plugins
-timestamper:1.17
+timestamper:1.25
 workspace-cleanup:0.45
-pipeline-utility-steps:2.13.2
+pipeline-utility-steps:2.16.0
 
-# HTTP and security plugins
+# Security and authentication
+matrix-auth:3.2.1
+
+# HTTP and API plugins
 http_request:1.18
-matrix-auth:3.1.7
 
-# Dependency check plugin (load last)
+# Build tools
+maven-plugin:3.22
+
+# Dependency management (for future OWASP Dependency Check integration)
 dependency-check-jenkins-plugin:5.4.3
+
+# Job DSL (for programmatic job creation)
+job-dsl:1.84
