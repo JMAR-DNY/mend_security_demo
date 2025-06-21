@@ -75,7 +75,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Jenkins with Runtime Plugin Installation
+  # Jenkins with Official Plugin Pre-installation
   jenkins:
     image: jenkins/jenkins:2.426.1-lts
     container_name: jenkins
@@ -88,6 +88,7 @@ services:
       - 'jenkins-data:/var/jenkins_home'
       - '/var/run/docker.sock:/var/run/docker.sock'
       - './jenkins/casc_configs:/var/jenkins_home/casc_configs:ro'
+      # Official method: Mount plugins.txt to the correct location
       - './jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro'
     ports:
       - "8080:8080"
@@ -100,7 +101,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 120s
+      start_period: 180s  # Longer startup time for plugin installation
     depends_on:
       dependency-track-apiserver:
         condition: service_healthy
