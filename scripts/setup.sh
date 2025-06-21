@@ -37,9 +37,35 @@ check_service() {
     return 1
 }
 
-# Wait for services to be ready with longer timeouts
+# Function to check Docker container health
+check_container_health() {
+    local container_name=$1
+    local max_attempts=30
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        local health_status=$(docker inspect --format='{{.State.Health.Status}}' $container_name 2>/dev/null || echo "none")
+        local running_status=$(docker inspect --format='{{.State.Running}}' $container_name 2>/dev/null || echo "false")
+        
+        if [ "$running_status" = "true" ]; then
+            if [ "$health_status" = "healthy" ] || [ "$health_status" = "none" ]; then
+                echo "✅ $container_name is ready"
+                return 0
+            fi
+        fi
+        
+        echo "⏳ Waiting for $container_name... (attempt $attempt/$max_attempts) [running: $running_status, health: $health_status]"
+        sleep 10
+        ((attempt++))
+    done
+    
+    echo "❌ $container_name failed to start within timeout"
+    return 1
+}
+
+# Wait for PostgreSQL using container health check
 echo "⏳ Waiting for PostgreSQL to start..."
-check_service "PostgreSQL" 5432
+check_container_health "dt-postgres"
 
 echo "⏳ Waiting for Dependency Track API (this takes 3-5 minutes)..."
 check_service "Dependency Track API" 8081
