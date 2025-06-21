@@ -1,0 +1,208 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.40">
+  <actions/>
+  <description>WebGoat v8.1.0 Security Scan Pipeline - Demonstrates OWASP Dependency Check and Dependency Track integration</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers/>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty/>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.92">
+    <script>pipeline {
+    agent any
+    
+    environment {
+        DT_API_URL = 'http://dependency-track-apiserver:8080'
+        DT_API_KEY = credentials('dt-api-key')
+        WEBGOAT_REPO = 'https://github.com/WebGoat/WebGoat.git'
+        WEBGOAT_TAG = 'v8.1.0'
+        PROJECT_NAME = 'WebGoat'
+        PROJECT_VERSION = '8.1.0'
+    }
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '🔄 Cloning WebGoat v8.1.0...'
+                git branch: "${WEBGOAT_TAG}", url: "${WEBGOAT_REPO}"
+                
+                echo '📝 Applying CycloneDX plugin configuration...'
+                sh '''
+                    # Backup original pom.xml
+                    cp pom.xml pom.xml.orig
+                    
+                    # Add CycloneDX plugin configuration
+                    xmlstarlet ed -L \
+                        -N pom="http://maven.apache.org/POM/4.0.0" \
+                        -s "//pom:build/pom:plugins" -t elem -n "plugin" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]" -t elem -n "groupId" -v "org.cyclonedx" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]" -t elem -n "artifactId" -v "cyclonedx-maven-plugin" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]" -t elem -n "version" -v "2.7.9" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]" -t elem -n "configuration" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "projectType" -v "application" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "schemaVersion" -v "1.4" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "includeBomSerialNumber" -v "true" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "includeCompileScope" -v "true" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "includeProvidedScope" -v "true" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "includeRuntimeScope" -v "true" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "includeSystemScope" -v "true" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "includeTestScope" -v "false" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "outputFormat" -v "json" \
+                        -s "//pom:build/pom:plugins/pom:plugin[last()]/pom:configuration" -t elem -n "outputName" -v "webgoat-bom" \
+                        pom.xml || echo "Note: xmlstarlet modification failed, using manual approach"
+                '''
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+                echo '🔨 Building WebGoat application...'
+                sh '''
+                    # Clean and build the application
+                    mvn clean compile package -DskipTests -Dmaven.javadoc.skip=true
+                    
+                    # Verify build artifacts
+                    ls -la target/
+                '''
+            }
+        }
+        
+        stage('Dependency Check Scan') {
+            steps {
+                echo '🔍 Running OWASP Dependency Check...'
+                script {
+                    try {
+                        dependencyCheck(
+                            additionalArguments: '''
+                                --format ALL
+                                --enableRetired
+                                --enableExperimental
+                                --log /tmp/dc.log
+                            ''',
+                            odcInstallation: 'dependency-check'
+                        )
+                    } catch (Exception e) {
+                        echo "Dependency Check completed with findings: ${e.getMessage()}"
+                        // Continue pipeline even if vulnerabilities are found
+                    }
+                }
+            }
+        }
+        
+        stage('Generate SBOM') {
+            steps {
+                echo '📋 Generating CycloneDX SBOM...'
+                sh '''
+                    # Generate SBOM using CycloneDX Maven plugin
+                    mvn org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom
+                    
+                    # Verify SBOM was created
+                    ls -la target/
+                    
+                    if [ -f "target/webgoat-bom.json" ]; then
+                        echo "✅ SBOM generated successfully"
+                        head -20 target/webgoat-bom.json
+                    else
+                        echo "❌ SBOM generation failed"
+                        exit 1
+                    fi
+                '''
+            }
+        }
+        
+        stage('Upload to Dependency Track') {
+            steps {
+                echo '⬆️ Uploading SBOM to Dependency Track...'
+                script {
+                    try {
+                        // First create or get project UUID
+                        def createProjectResponse = httpRequest(
+                            httpMode: 'PUT',
+                            url: "${DT_API_URL}/api/v1/project",
+                            customHeaders: [[name: 'X-API-Key', value: "${DT_API_KEY}"], [name: 'Content-Type', value: 'application/json']],
+                            requestBody: """{
+                                "name": "${PROJECT_NAME}",
+                                "version": "${PROJECT_VERSION}",
+                                "description": "WebGoat application security scan",
+                                "tags": [
+                                    {"name": "demo"},
+                                    {"name": "webgoat"},
+                                    {"name": "security-scan"}
+                                ]
+                            }"""
+                        )
+                        
+                        echo "Project creation response: ${createProjectResponse.status}"
+                        
+                        // Upload SBOM
+                        def uploadResponse = httpRequest(
+                            httpMode: 'POST',
+                            url: "${DT_API_URL}/api/v1/bom",
+                            customHeaders: [[name: 'X-API-Key', value: "${DT_API_KEY}"]],
+                            multipartName: 'bom',
+                            uploadFile: 'target/webgoat-bom.json'
+                        )
+                        
+                        echo "✅ SBOM upload response: ${uploadResponse.status}"
+                        
+                        if (uploadResponse.status == 200) {
+                            echo "🎉 SBOM successfully uploaded to Dependency Track!"
+                        }
+                        
+                    } catch (Exception e) {
+                        echo "❌ Failed to upload SBOM: ${e.getMessage()}"
+                        throw e
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo '📊 Archiving artifacts and reports...'
+            
+            // Archive dependency check reports
+            archiveArtifacts artifacts: '**/dependency-check-report.html', fingerprint: true, allowEmptyArchive: true
+            archiveArtifacts artifacts: '**/dependency-check-report.xml', fingerprint: true, allowEmptyArchive: true
+            
+            // Archive SBOM
+            archiveArtifacts artifacts: '**/webgoat-bom.json', fingerprint: true, allowEmptyArchive: true
+            
+            // Archive build artifacts
+            archiveArtifacts artifacts: 'target/*.war', fingerprint: true, allowEmptyArchive: true
+            
+            // Publish dependency check results
+            script {
+                try {
+                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                } catch (Exception e) {
+                    echo "Could not publish dependency check results: ${e.getMessage()}"
+                }
+            }
+            
+            // Clean workspace
+            cleanWs()
+        }
+        success {
+            echo '✅ Security scan pipeline completed successfully!'
+            echo '🌐 Check Dependency Track at http://localhost:8081 for vulnerability analysis'
+        }
+        failure {
+            echo '❌ Security scan pipeline failed. Check the logs for details.'
+        }
+    }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

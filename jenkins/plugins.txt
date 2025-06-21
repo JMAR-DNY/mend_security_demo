@@ -1,0 +1,10 @@
+pipeline-stage-view:2.25
+git:4.15.0
+workflow-aggregator:2.6
+dependency-check-jenkins-plugin:5.4.3
+http_request:1.18
+credentials:2.6.1
+pipeline-utility-steps:2.13.2
+build-timeout:1.27
+timestamper:1.17
+workspace-cleanup:0.45

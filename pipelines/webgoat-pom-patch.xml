@@ -1,0 +1,26 @@
+<!-- This is a snippet to add to WebGoat's pom.xml for CycloneDX SBOM generation -->
+<plugin>
+    <groupId>org.cyclonedx</groupId>
+    <artifactId>cyclonedx-maven-plugin</artifactId>
+    <version>2.7.9</version>
+    <configuration>
+        <projectType>application</projectType>
+        <schemaVersion>1.4</schemaVersion>
+        <includeBomSerialNumber>true</includeBomSerialNumber>
+        <includeCompileScope>true</includeCompileScope>
+        <includeProvidedScope>true</includeProvidedScope>
+        <includeRuntimeScope>true</includeRuntimeScope>
+        <includeSystemScope>true</includeSystemScope>
+        <includeTestScope>false</includeTestScope>
+        <outputFormat>json</outputFormat>
+        <outputName>webgoat-bom</outputName>
+    </configuration>
+    <executions>
+        <execution>
+            <phase>package</phase>
+            <goals>
+                <goal>makeAggregateBom</goal>
+            </goals>
+        </execution>
+    </executions>
+</plugin>

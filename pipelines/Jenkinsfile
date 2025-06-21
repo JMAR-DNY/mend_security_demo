@@ -1,0 +1,88 @@
+pipeline {
+    agent any
+    
+    environment {
+        DT_API_URL = 'http://dependency-track-apiserver:8080'
+        DT_API_KEY = credentials('dt-api-key')
+        WEBGOAT_REPO = 'https://github.com/WebGoat/WebGoat.git'
+        WEBGOAT_TAG = 'v8.1.0'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Cloning WebGoat v8.1.0...'
+                git branch: WEBGOAT_TAG, url: WEBGOAT_REPO
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+                echo 'Building WebGoat application...'
+                sh '''
+                    # Copy modified pom.xml to include CycloneDX plugin
+                    cp /usr/share/jenkins/ref/jobs/webgoat-pom-patch.xml pom.xml
+                    
+                    # Build the application
+                    mvn clean compile package -DskipTests
+                '''
+            }
+        }
+        
+        stage('Dependency Check Scan') {
+            steps {
+                echo 'Running OWASP Dependency Check...'
+                dependencyCheck(
+                    additionalArguments: '''
+                        --format ALL
+                        --suppression suppression.xml
+                        --enableRetired
+                    ''',
+                    odcInstallation: 'dependency-check'
+                )
+            }
+        }
+        
+        stage('Generate SBOM') {
+            steps {
+                echo 'Generating CycloneDX SBOM...'
+                sh '''
+                    mvn org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom
+                '''
+            }
+        }
+        
+        stage('Upload to Dependency Track') {
+            steps {
+                echo 'Uploading SBOM to Dependency Track...'
+                script {
+                    def response = httpRequest(
+                        httpMode: 'PUT',
+                        url: "${DT_API_URL}/api/v1/bom",
+                        customHeaders: [[name: 'X-API-Key', value: DT_API_KEY]],
+                        uploadFile: 'target/bom.json',
+                        contentType: 'APPLICATION_JSON'
+                    )
+                    echo "Upload response: ${response.status}"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Archive the reports
+            archiveArtifacts artifacts: '**/dependency-check-report.html', fingerprint: true
+            archiveArtifacts artifacts: '**/bom.json', fingerprint: true
+            
+            // Publish dependency check results
+            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+        }
+        success {
+            echo 'Security scan completed successfully!'
+        }
+        failure {
+            echo 'Security scan failed. Check the logs for details.'
+        }
+    }
+}
