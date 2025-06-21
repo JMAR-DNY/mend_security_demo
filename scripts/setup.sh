@@ -58,60 +58,112 @@ check_service "Dependency Track API" 8081
 echo "🔧 Waiting for Jenkins..."
 check_service "Jenkins" 8080
 
-# Install plugins at runtime
+# Install plugins at runtime with proper update center handling
 echo "🔌 Installing Jenkins plugins at runtime..."
 sleep 30  # Give Jenkins time to fully start
 
-# Execute plugin installation inside Jenkins container
+# Execute enhanced plugin installation inside Jenkins container
 echo "Installing required plugins for Mend demo..."
-docker exec jenkins /bin/bash -c "
+docker exec jenkins /bin/bash -c '
     # Wait for Jenkins to be fully ready
-    max_attempts=20
+    max_attempts=30
     attempt=1
     
-    while [ \$attempt -le \$max_attempts ]; do
+    echo "Waiting for Jenkins CLI to be available..."
+    while [ $attempt -le $max_attempts ]; do
         if java -jar /var/jenkins_home/war/WEB-INF/lib/cli-*.jar -s http://localhost:8080/ -auth admin:admin who-am-i >/dev/null 2>&1; then
-            echo 'Jenkins CLI is ready'
+            echo "Jenkins CLI is ready"
             break
         fi
-        echo \"Waiting for Jenkins CLI to be available... (attempt \$attempt/\$max_attempts)\"
+        echo "Waiting for Jenkins CLI... (attempt $attempt/$max_attempts)"
         sleep 10
         ((attempt++))
     done
     
-    if [ \$attempt -gt \$max_attempts ]; then
-        echo 'Jenkins CLI failed to become available'
+    if [ $attempt -gt $max_attempts ]; then
+        echo "Jenkins CLI failed to become available"
         exit 1
     fi
     
-    echo 'Installing required plugins...'
-    java -jar /var/jenkins_home/war/WEB-INF/lib/cli-*.jar -s http://localhost:8080/ -auth admin:admin install-plugin \
-        workflow-aggregator \
-        git \
-        maven-plugin \
-        dependency-check-jenkins-plugin \
-        http_request \
-        pipeline-utility-steps \
-        configuration-as-code \
-        job-dsl \
-        credentials \
-        credentials-binding \
-        timestamper \
-        workspace-cleanup \
-        build-timeout \
-        pipeline-stage-view \
-        matrix-auth \
-        structs \
-        script-security \
-        || echo 'Some plugins may already be installed or have dependency issues'
+    # Wait for update center to load
+    echo "Waiting for Jenkins update center to load..."
+    update_attempts=20
+    update_attempt=1
     
-    echo 'Restarting Jenkins to activate plugins...'
-    java -jar /var/jenkins_home/war/WEB-INF/lib/cli-*.jar -s http://localhost:8080/ -auth admin:admin restart
-"
+    while [ $update_attempt -le $update_attempts ]; do
+        # Check if update center has data
+        if java -jar /var/jenkins_home/war/WEB-INF/lib/cli-*.jar -s http://localhost:8080/ -auth admin:admin list-plugins | grep -q "workflow-aggregator\|git\|maven" 2>/dev/null; then
+            echo "Update center data is available"
+            break
+        fi
+        
+        # Try to reload update center
+        echo "Reloading update center... (attempt $update_attempt/$update_attempts)"
+        curl -X POST -u admin:admin http://localhost:8080/updateCenter/checkUpdatesNow || true
+        sleep 15
+        ((update_attempt++))
+    done
+    
+    # Install plugins using different approach if update center still not ready
+    if [ $update_attempt -gt $update_attempts ]; then
+        echo "Update center taking longer than expected, trying alternative installation..."
+        
+        # Create plugins directory and install plugins manually from Jenkins war
+        mkdir -p /var/jenkins_home/plugins
+        
+        # Copy built-in plugins if available
+        if [ -d "/usr/share/jenkins/ref/plugins" ]; then
+            echo "Copying built-in plugins..."
+            cp -r /usr/share/jenkins/ref/plugins/* /var/jenkins_home/plugins/ 2>/dev/null || echo "No built-in plugins to copy"
+        fi
+        
+        # Install essential plugins via jenkins-plugin-cli if available
+        if command -v jenkins-plugin-cli >/dev/null 2>&1; then
+            echo "Installing plugins via jenkins-plugin-cli..."
+            jenkins-plugin-cli --plugins \
+                workflow-aggregator \
+                git \
+                maven-plugin \
+                dependency-check-jenkins-plugin \
+                http_request \
+                pipeline-utility-steps \
+                configuration-as-code \
+                job-dsl \
+                credentials \
+                credentials-binding \
+                timestamper \
+                workspace-cleanup \
+                build-timeout \
+                matrix-auth \
+                2>/dev/null || echo "jenkins-plugin-cli installation had issues"
+        fi
+    else
+        echo "Installing plugins via Jenkins CLI..."
+        java -jar /var/jenkins_home/war/WEB-INF/lib/cli-*.jar -s http://localhost:8080/ -auth admin:admin install-plugin \
+            workflow-aggregator \
+            git \
+            maven-plugin \
+            dependency-check-jenkins-plugin \
+            http_request \
+            pipeline-utility-steps \
+            configuration-as-code \
+            job-dsl \
+            credentials \
+            credentials-binding \
+            timestamper \
+            workspace-cleanup \
+            build-timeout \
+            matrix-auth \
+            || echo "Some plugins may already be installed or have dependency issues"
+    fi
+    
+    echo "Plugin installation completed, restarting Jenkins..."
+    java -jar /var/jenkins_home/war/WEB-INF/lib/cli-*.jar -s http://localhost:8080/ -auth admin:admin restart || echo "Restart command sent"
+'
 
 # Wait for Jenkins to restart
 echo "⏳ Waiting for Jenkins to restart and load configuration..."
-sleep 60
+sleep 90  # Longer wait for restart and plugin loading
 
 # Verify Jenkins is back up and check for plugins
 echo "🔍 Verifying Jenkins restart and plugin installation..."
@@ -124,28 +176,29 @@ while [ $attempt -le $max_attempts ]; do
         break
     fi
     echo "   Attempt $attempt/$max_attempts - waiting for Jenkins..."
-    sleep 10
+    sleep 15
     ((attempt++))
 done
 
 if [ $attempt -gt $max_attempts ]; then
     echo "❌ Jenkins failed to restart properly"
-    exit 1
+    echo "💡 Continuing anyway - you may need to install plugins manually"
 fi
 
 # Give Jenkins time to process JCasC and create jobs
 echo "⚙️ Allowing time for Jenkins Configuration as Code to process..."
-sleep 45
+sleep 60
 
 # Verify job creation
 echo "🔍 Verifying pipeline job creation..."
-JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null | grep -o '\"name\":\"webgoat-security-scan\"' || echo "")
+JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null | grep -o '"name":"webgoat-security-scan"' || echo "")
 
 if [ -n "$JOB_CHECK" ]; then
     echo "✅ WebGoat security scan pipeline job created successfully"
 else
     echo "⚠️ Pipeline job may still be creating or there was an issue"
     echo "   You can check Jenkins at http://localhost:8080 to verify"
+    echo "   If job is missing, you may need to trigger JCasC reload manually"
 fi
 
 # Final system verification
@@ -193,9 +246,14 @@ echo "   ✓ Security scan pipeline job auto-created via JCasC"
 echo "   ✓ Tools and credentials pre-configured"
 echo "   ✓ Complete Mend security workflow ready"
 echo ""
-echo "⏱️ Total Setup Time: ~7-10 minutes (much faster than custom builds!)"
+echo "⏱️ Total Setup Time: ~10-12 minutes (includes plugin installation wait time)"
 echo ""
-echo "💡 Troubleshooting:"
-echo "   • If pipeline job isn't visible, wait 2-3 minutes and refresh Jenkins"
+echo "💡 Next Steps:"
+if [ -z "$JOB_CHECK" ]; then
+    echo "   • Pipeline job may need manual verification"
+    echo "   • Go to Jenkins → Manage Jenkins → Configuration as Code → Reload existing configuration"
+    echo "   • Check for any plugin installation issues in Jenkins logs"
+fi
+echo "   • Run 'make verify-plugins' to check plugin installation"
+echo "   • Use 'make demo' for execution instructions"
 echo "   • Check 'make logs' if any service issues"
-echo "   • Use 'make status' for detailed health information"

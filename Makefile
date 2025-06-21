@@ -54,9 +54,10 @@ logs:
 clean:
 	@echo "🧹 Cleaning up all containers, volumes, and data..."
 	@echo "⚠️  This will remove all demo data!"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
-	echo ""; \
-	if [[ $REPLY =~ ^[Yy]$ ]]; then \
+	@echo "Are you sure? [y/N] "; \
+	read answer; \
+	if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
+		echo "🗑️ Removing containers and volumes..."; \
 		docker-compose down -v --remove-orphans; \
 		docker system prune -f; \
 		echo "✅ Cleanup complete"; \
@@ -147,51 +148,45 @@ verify-plugins:
 	@echo "🔌 Checking Jenkins plugin installation..."
 	@echo ""
 	@echo "Essential plugins for Mend demo:"
-	@docker exec jenkins /bin/bash -c "
-		if [ -f /var/jenkins_home/plugins/workflow-aggregator.jpi ]; then
-			echo '✅ Pipeline (workflow-aggregator)'
-		else
-			echo '❌ Pipeline (workflow-aggregator) - MISSING'
-		fi
-		
-		if [ -f /var/jenkins_home/plugins/dependency-check-jenkins-plugin.jpi ]; then
-			echo '✅ OWASP Dependency Check'
-		else
-			echo '❌ OWASP Dependency Check - MISSING'
-		fi
-		
-		if [ -f /var/jenkins_home/plugins/http_request.jpi ]; then
-			echo '✅ HTTP Request'
-		else
-			echo '❌ HTTP Request - MISSING'
-		fi
-		
-		if [ -f /var/jenkins_home/plugins/configuration-as-code.jpi ]; then
-			echo '✅ Configuration as Code'
-		else
-			echo '❌ Configuration as Code - MISSING'
-		fi
-		
-		if [ -f /var/jenkins_home/plugins/job-dsl.jpi ]; then
-			echo '✅ Job DSL'
-		else
-			echo '❌ Job DSL - MISSING'
-		fi
-		
-		if [ -f /var/jenkins_home/plugins/maven-plugin.jpi ]; then
-			echo '✅ Maven Integration'
-		else
-			echo '❌ Maven Integration - MISSING'
-		fi
-		
-		if [ -f /var/jenkins_home/plugins/git.jpi ]; then
-			echo '✅ Git'
-		else
-			echo '❌ Git - MISSING'
-		fi
+	@docker exec jenkins /bin/bash -c " \
+		if [ -f /var/jenkins_home/plugins/workflow-aggregator.jpi ]; then \
+			echo '✅ Pipeline (workflow-aggregator)'; \
+		else \
+			echo '❌ Pipeline (workflow-aggregator) - MISSING'; \
+		fi; \
+		if [ -f /var/jenkins_home/plugins/dependency-check-jenkins-plugin.jpi ]; then \
+			echo '✅ OWASP Dependency Check'; \
+		else \
+			echo '❌ OWASP Dependency Check - MISSING'; \
+		fi; \
+		if [ -f /var/jenkins_home/plugins/http_request.jpi ]; then \
+			echo '✅ HTTP Request'; \
+		else \
+			echo '❌ HTTP Request - MISSING'; \
+		fi; \
+		if [ -f /var/jenkins_home/plugins/configuration-as-code.jpi ]; then \
+			echo '✅ Configuration as Code'; \
+		else \
+			echo '❌ Configuration as Code - MISSING'; \
+		fi; \
+		if [ -f /var/jenkins_home/plugins/job-dsl.jpi ]; then \
+			echo '✅ Job DSL'; \
+		else \
+			echo '❌ Job DSL - MISSING'; \
+		fi; \
+		if [ -f /var/jenkins_home/plugins/maven-plugin.jpi ]; then \
+			echo '✅ Maven Integration'; \
+		else \
+			echo '❌ Maven Integration - MISSING'; \
+		fi; \
+		if [ -f /var/jenkins_home/plugins/git.jpi ]; then \
+			echo '✅ Git'; \
+		else \
+			echo '❌ Git - MISSING'; \
+		fi \
 	" 2>/dev/null || echo "❌ Could not check plugins (Jenkins may not be running)"
 	@echo ""
 	@echo "💡 If plugins are missing:"
 	@echo "   • Run: make restart"
 	@echo "   • Wait for full initialization"
-	@echo "   • Check: make logs
+	@echo "   • Check: make logs"
