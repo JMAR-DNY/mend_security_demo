@@ -216,6 +216,31 @@ create_pipeline() {
                     '''
                 }
             }
+
+            stage('🔨 Build Application') {
+                steps {
+                    echo '🔨 Building WebGoat application with Maven...'
+                    
+                    sh '''
+                        echo "🧹 Cleaning previous builds..."
+                        mvn clean -q
+                        
+                        echo "🔧 Compiling and packaging..."
+                        mvn compile package -DskipTests -Dmaven.javadoc.skip=true -q
+                        
+                        echo "📦 Build Results:"
+                        ls -la target/ | grep -E "\\.(war|jar)$" || echo "No packaged artifacts found"
+                        
+                        # Check if build was successful
+                        if [ -d "target" ] && [ "$(ls -A target/ 2>/dev/null)" ]; then
+                            echo "✅ Build completed successfully"
+                        else
+                            echo "❌ Build may have failed - no target directory found"
+                            exit 1
+                        fi
+                    '''
+                }
+            }
         }
     }]]></script>
     <sandbox>true</sandbox>
