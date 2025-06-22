@@ -27,27 +27,27 @@ docker-compose up -d
 check_service() {
     local service_name=$1
     local port=$2
+    local path=${3:-/}
     local max_attempts=30
     local attempt=1
-    
+
     echo "⏳ Waiting for $service_name to be ready..."
     while [ $attempt -le $max_attempts ]; do
-        if curl -f http://localhost:$port >/dev/null 2>&1; then
+        if curl -fL http://localhost:$port$path >/dev/null 2>&1; then
             echo "✅ $service_name is ready"
             return 0
         fi
-        
         if [ $((attempt % 5)) -eq 0 ]; then
             echo "   Still waiting... (attempt $attempt/$max_attempts)"
         fi
-        
         sleep 10
         ((attempt++))
     done
-    
+
     echo "❌ $service_name failed to start within timeout"
     return 1
 }
+
 
 # Wait for services in dependency order
 echo "🔄 Waiting for services to initialize..."
@@ -58,11 +58,11 @@ sleep 15
 
 # Dependency Track API (needs PostgreSQL)
 echo "🛡️ Starting Dependency Track..."
-check_service "Dependency Track API" 8081
+check_service "Dependency Track API" 8081 /api/version
 
 # Jenkins (our custom-built image with plugins pre-installed)
 echo "🔧 Starting Jenkins with pre-installed plugins..."
-check_service "Jenkins" 8080
+check_service "Jenkins" 8080 /login
 
 # Give JCasC time to process configuration
 echo "⚙️ Allowing Jenkins Configuration as Code to process..."
