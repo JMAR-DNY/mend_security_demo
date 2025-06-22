@@ -24,6 +24,7 @@ dependency-track:6.0.1
 
 # Credentials management (required by other plugins)
 credentials-binding
+plain-credentials
 
 # Matrix authorization management
 matrix-auth
