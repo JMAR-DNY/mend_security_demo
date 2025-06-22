@@ -26,9 +26,9 @@ help:
 	@echo ""
 
 setup:
-	@echo "🚀 Setting up Mend Security Demo with runtime plugin installation..."
-	@echo "⏰ This will take 7-10 minutes (installs plugins at runtime)"
-	@echo "⚡ Much faster than custom Docker builds!"
+	@echo "🚀 Setting up Mend Security Demo with pre-built Jenkins image..."
+	@echo "⏰ This will take 5-8 minutes (builds custom Jenkins image with plugins)"
+	@echo "🔧 Building Jenkins with pre-installed plugins for reliability"
 	cp .env.example .env 2>/dev/null || echo "Using existing .env"
 	chmod +x scripts/*.sh 2>/dev/null || echo "Scripts already executable"
 	./scripts/setup.sh

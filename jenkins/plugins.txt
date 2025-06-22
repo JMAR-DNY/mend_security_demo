@@ -1,56 +1,14 @@
-# Essential plugins for Mend Security Demo
-# Using plugin short names (jenkins-plugin-cli format)
-
-# Pipeline Support
-workflow-aggregator
-workflow-job
-workflow-cps
-workflow-basic-steps
-workflow-durable-task-step
-workflow-scm-step
-workflow-support
-workflow-step-api
-workflow-api
-pipeline-stage-view
-pipeline-rest-api
-pipeline-graph-analysis
-
-# Git Integration
-git
-git-client
-scm-api
-
-# Build Tools
-maven-plugin
-ant
-
-# Security Scanning (REQUIRED for Mend demo)
-dependency-check-jenkins-plugin
-
-# API Integration (REQUIRED for Dependency Track)
-http_request
-
-# Utility Plugins
-pipeline-utility-steps
-timestamper
-workspace-cleanup
-build-timeout
-
-# Configuration as Code (REQUIRED)
-configuration-as-code
-
-# Job DSL (REQUIRED for pipeline creation)
-job-dsl
-
-# Credentials Management
-credentials
-credentials-binding
-ssh-credentials
-plain-credentials
-
-# Security
-matrix-auth
-
-# Core Dependencies
-structs
-script-security
+workflow-aggregator:596.v8c21c963d92d
+git:5.0.0
+pipeline-stage-view:2.25
+dependency-check-jenkins-plugin:5.4.3
+configuration-as-code:1625.v27444588cc3d
+http_request:1.18
+credentials:1271.v54b_1c5db_6924
+pipeline-utility-steps:2.16.0
+build-timeout:1.27
+timestamper:1.25
+workspace-cleanup:0.45
+docker-workflow:563.vd5d2e5c4007f
+blueocean:1.25.9
+maven-plugin:3.22

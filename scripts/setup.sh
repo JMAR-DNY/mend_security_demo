@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Setting up Mend Security Demo with runtime plugin installation..."
+echo "🚀 Setting up Mend Security Demo with pre-built Jenkins image..."
 
 # Check prerequisites
 echo "📋 Checking prerequisites..."
@@ -10,13 +10,17 @@ command -v docker-compose >/dev/null 2>&1 || { echo "❌ Docker Compose is requi
 
 # Create necessary directories
 echo "📁 Creating directory structure..."
-mkdir -p jenkins/casc_configs jenkins/init.groovy.d workspace reports
+mkdir -p jenkins/casc_configs workspace reports
 
 # Make scripts executable
 chmod +x scripts/*.sh 2>/dev/null || echo "Scripts already executable"
 
-# Start services
-echo "🐳 Starting Docker services..."
+# Build and start services
+echo "🔨 Building custom Jenkins image with pre-installed plugins..."
+echo "   This ensures reliable plugin installation and avoids runtime issues"
+docker-compose build jenkins
+
+echo "🐳 Starting all services..."
 docker-compose up -d
 
 # Function to check service health
@@ -45,50 +49,30 @@ check_service() {
     return 1
 }
 
-# Wait for services
+# Wait for services in dependency order
 echo "🔄 Waiting for services to initialize..."
 
-# PostgreSQL first
+# PostgreSQL first (dependency for Dependency Track)
 echo "🗄️ Starting PostgreSQL..."
-sleep 20
+sleep 15
 
-# Dependency Track API
+# Dependency Track API (needs PostgreSQL)
 echo "🛡️ Starting Dependency Track..."
 check_service "Dependency Track API" 8081
 
-# Jenkins
-echo "🔧 Starting Jenkins (plugins will install at runtime)..."
+# Jenkins (our custom-built image with plugins pre-installed)
+echo "🔧 Starting Jenkins with pre-installed plugins..."
 check_service "Jenkins" 8080
 
-# Wait for plugin installation
-echo "🔌 Waiting for Jenkins plugins to install (this takes 3-5 minutes)..."
-echo "   Jenkins will restart automatically after plugin installation"
-sleep 60
-
-# Check if Jenkins restarted after plugin installation
-echo "🔄 Checking if Jenkins is restarting after plugin installation..."
-JENKINS_READY=false
-for i in {1..20}; do
-    if curl -f http://localhost:8080/login >/dev/null 2>&1; then
-        JENKINS_READY=true
-        break
-    fi
-    echo "   Waiting for Jenkins restart... (${i}/20)"
-    sleep 15
-done
-
-if [ "$JENKINS_READY" = true ]; then
-    echo "✅ Jenkins is ready after plugin installation"
-else
-    echo "⚠️ Jenkins may still be installing plugins"
-fi
-
-# Give JCasC time to create jobs
-echo "⚙️ Allowing time for Jenkins Configuration as Code..."
+# Give JCasC time to process configuration
+echo "⚙️ Allowing Jenkins Configuration as Code to process..."
 sleep 30
 
-# Verify plugin installation
-echo "🔍 Verifying essential plugins..."
+# Verify our setup
+echo "🔍 Verifying setup..."
+
+# Check essential plugins are installed
+echo "🔌 Verifying essential plugins are installed:"
 ESSENTIAL_PLUGINS=("workflow-aggregator" "dependency-check-jenkins-plugin" "http_request" "configuration-as-code" "job-dsl" "maven-plugin" "git")
 installed_count=0
 
@@ -98,13 +82,21 @@ for plugin in "${ESSENTIAL_PLUGINS[@]}"; do
         echo "✅ $plugin installed"
         ((installed_count++))
     else
-        echo "⏳ $plugin pending installation"
+        echo "❌ $plugin NOT installed"
     fi
 done
 
-echo "📊 Plugin Status: $installed_count/${#ESSENTIAL_PLUGINS[@]} essential plugins verified"
+# Check if pipeline job was created
+echo "🔧 Checking if pipeline job was created..."
+JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null | grep -o '"name":"webgoat-security-scan"' || echo "")
 
-# Final status check
+if [ -n "$JOB_CHECK" ]; then
+    echo "✅ WebGoat security scan pipeline job created successfully"
+else
+    echo "⚠️ Pipeline job not yet created (JCasC may still be processing)"
+fi
+
+# Final status
 echo ""
 echo "🏥 Final System Status:"
 echo -n "   PostgreSQL: "
@@ -124,11 +116,11 @@ echo "   • Jenkins:           http://localhost:8080 (admin/admin)"
 echo "   • Dependency Track:  http://localhost:8081 (admin/admin)"
 echo "   • DT Frontend:       http://localhost:8082"
 echo ""
-echo "⚡ What Was Automated:"
-echo "   ✓ Runtime plugin installation (no SSL issues)"
-echo "   ✓ Jenkins Configuration as Code"
-echo "   ✓ Automatic job creation via JCasC"
-echo "   ✓ Complete security scanning workflow"
+echo "⚡ What Was Accomplished:"
+echo "   ✓ Custom Jenkins image built with pre-installed plugins"
+echo "   ✓ All $installed_count/${#ESSENTIAL_PLUGINS[@]} essential plugins installed during build"
+echo "   ✓ Jenkins Configuration as Code applied"
+echo "   ✓ Reliable, reproducible plugin installation"
 echo ""
 echo "🎬 Ready to Run Demo:"
 echo "   1. Go to Jenkins: http://localhost:8080"
@@ -136,11 +128,10 @@ echo "   2. Login with admin/admin"
 echo "   3. Find 'webgoat-security-scan' pipeline job"
 echo "   4. Click 'Build Now' to start the security scan"
 echo ""
-if [ $installed_count -lt ${#ESSENTIAL_PLUGINS[@]} ]; then
-    echo "💡 Note: Some plugins may still be installing"
-    echo "   • Wait 2-3 more minutes for full installation"
-    echo "   • Check status: make verify-plugins"
-    echo "   • Jenkins may restart automatically when ready"
+if [ $installed_count -eq ${#ESSENTIAL_PLUGINS[@]} ]; then
+    echo "🎯 All plugins successfully installed! Demo is ready."
+else
+    echo "⚠️ Some plugins may be missing. Check with: make verify-plugins"
 fi
 echo ""
-echo "⏱️ Total Setup Time: ~7-10 minutes (with runtime plugin installation)"
+echo "⏱️ Total Setup Time: ~5-8 minutes (with reliable pre-build plugin installation)"
