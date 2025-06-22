@@ -4,10 +4,8 @@ FROM jenkins/jenkins:2.426.1-lts-jdk17
 USER root
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    maven \
+RUN apt-get update && apt-get install -y ca-certificates curl git maven \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Switch back to jenkins user for plugin installation
