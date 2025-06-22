@@ -140,16 +140,84 @@ create_pipeline() {
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
-    <script>pipeline {
+    <script><![CDATA[
+    pipeline {
         agent any
+        environment {
+            DT_API_URL = 'http://dependency-track-apiserver:8080'
+            DT_API_KEY = credentials('dt-api-key')
+            WEBGOAT_REPO = 'https://github.com/WebGoat/WebGoat.git'
+            WEBGOAT_TAG = 'v8.1.0'
+            PROJECT_NAME = 'WebGoat'
+            PROJECT_VERSION = '8.1.0'
+        }
         stages {
-            stage('Test') {
+            stage('🔄 Checkout WebGoat') {
                 steps {
-                    echo 'Hello, Jenkins!'
+                    echo '🔄 Cloning WebGoat v8.1.0 from GitHub...'
+                    checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "refs/tags/${WEBGOAT_TAG}"]],
+                    userRemoteConfigs: [[url: "${WEBGOAT_REPO}"]]
+                    ])
+                    
+                    echo '📝 Configuring CycloneDX plugin for SBOM generation...'
+                    script {
+                        def pomContent = readFile('pom.xml')
+                        
+                        if (pomContent.contains('cyclonedx-maven-plugin')) {
+                            echo '✅ CycloneDX plugin already configured'
+                        } else {
+                            echo '🔧 Adding CycloneDX plugin to Maven configuration'
+                            
+                            def cycloneDxPlugin = '''
+                <plugin>
+                    <groupId>org.cyclonedx</groupId>
+                    <artifactId>cyclonedx-maven-plugin</artifactId>
+                    <version>2.7.9</version>
+                    <configuration>
+                        <projectType>application</projectType>
+                        <schemaVersion>1.4</schemaVersion>
+                        <includeBomSerialNumber>true</includeBomSerialNumber>
+                        <includeCompileScope>true</includeCompileScope>
+                        <includeProvidedScope>true</includeProvidedScope>
+                        <includeRuntimeScope>true</includeRuntimeScope>
+                        <includeSystemScope>true</includeSystemScope>
+                        <includeTestScope>false</includeTestScope>
+                        <outputFormat>json</outputFormat>
+                        <outputName>webgoat-bom</outputName>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>makeAggregateBom</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>'''
+                            
+                            def modifiedPom = pomContent.replaceFirst(
+                                '</plugins>',
+                                cycloneDxPlugin + '\n        </plugins>'
+                            )
+                            
+                            writeFile file: 'pom.xml', text: modifiedPom
+                            echo '✅ CycloneDX plugin configuration added'
+                        }
+                    }
+                    
+                    sh '''
+                        echo "📊 Repository Information:"
+                        echo "Current directory: $(pwd)"
+                        echo "Git branch: $(git branch --show-current)"
+                        echo "Git commit: $(git rev-parse --short HEAD)"
+                        echo "Maven version: $(mvn -version | head -1)"
+                    '''
                 }
             }
         }
-    }</script>
+    }]]></script>
     <sandbox>true</sandbox>
   </definition>
 </flow-definition>
