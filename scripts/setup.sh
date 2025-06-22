@@ -53,12 +53,21 @@ check_service() {
 echo "🔄 Waiting for services to initialize..."
 
 # PostgreSQL first (dependency for Dependency Track)
-echo "🗄️ Starting PostgreSQL..."
+echo "🗄️  Starting PostgreSQL..."
 sleep 15
 
 # Dependency Track API (needs PostgreSQL)
-echo "🛡️ Starting Dependency Track..."
+echo "🛡️  Starting Dependency Track..."
 check_service "Dependency Track API" 8081 /api/version
+
+# Initialize Dependency Track admin account
+echo "🔑 Initializing Dependency Track admin account..."
+if [ -f scripts/init-dependency-track.sh ]; then
+    chmod +x scripts/init-dependency-track.sh
+    ./scripts/init-dependency-track.sh
+else
+    echo "⚠️ init-dependency-track.sh script not found, skipping admin setup"
+fi
 
 # Jenkins (our custom-built image with plugins pre-installed)
 echo "🔧 Starting Jenkins with pre-installed plugins..."
