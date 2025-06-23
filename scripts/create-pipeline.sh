@@ -4,14 +4,40 @@ set -e
 # Jenkins Pipeline Creator for Mend.io Demo - Fixed with CSRF Protection
 # This script creates the WebGoat security scan pipeline programmatically
 
-JENKINS_URL="http://localhost:8080"
-JENKINS_USER="admin"
-JENKINS_PASSWORD="admin"
-JOB_NAME="webgoat-security-scan"
-API_KEY="odt_0EvOUOJftaK9PHrVIh4yL1LgbAYHLhtJ"
+# Get the project root directory (parent of scripts folder)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Load environment variables from .env file if it exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    echo "📋 Loading environment variables from project .env file..."
+    set -a  # automatically export all variables
+    source "$PROJECT_ROOT/.env"
+    set +a  # stop auto-exporting
+else
+    echo "❌ ERROR: No .env file found in project root: $PROJECT_ROOT/.env"
+    echo "💡 Please create a .env file with required variables"
+    exit 1
+fi
+
+# Set variables from environment with validation
+JENKINS_URL="${JENKINS_URL:-http://localhost:8080}"
+JENKINS_USER="${JENKINS_USER:-admin}"
+JENKINS_PASSWORD="${JENKINS_PASSWORD:-admin}"
+JOB_NAME="${JOB_NAME:-webgoat-security-scan}"
+
+# Validate required API key
+if [ -z "$DT_API_KEY" ]; then
+    echo "❌ ERROR: DT_API_KEY not found in .env file"
+    echo "💡 Please ensure your .env file contains: DT_API_KEY=your-api-key-here"
+    exit 1
+fi
+
+API_KEY="$DT_API_KEY"
 
 echo "🔧 Creating Jenkins Pipeline: $JOB_NAME"
 echo "🛡️ Handling CSRF protection for secure API calls"
+echo "🔑 Using API Key: ${API_KEY:0:12}... (from .env file)"
 
 # --- Add this near top of script (after variable declarations) ---
 fetch_crumb_and_cookie() {
@@ -144,9 +170,6 @@ create_pipeline() {
     pipeline {
         agent any
 
-        tools {
-            maven 'Maven-3.9' 
-        }
         environment {
             DT_API_URL = 'http://dependency-track-apiserver:8080'
             DT_API_KEY = credentials('dt-api-key')
@@ -154,7 +177,7 @@ create_pipeline() {
             WEBGOAT_TAG = 'v8.1.0'
             PROJECT_NAME = 'WebGoat'
             PROJECT_VERSION = '8.1.0'
-           MAVEN_OPTS = '-Xmx1024m --add-opens java.base/java.lang=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED'
+           MAVEN_OPTS = '-Xmx1024m -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED'
         }
         stages {
             stage('🔄 Checkout WebGoat') {
