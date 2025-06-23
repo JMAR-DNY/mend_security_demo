@@ -76,10 +76,14 @@ update_env_file() {
     echo ""
     echo "💾 Updating .env file in project root: $ENV_FILE"
     
-    # Create backup if file exists
+    # Only create backup if file exists and is not just the example
     if [ -f "$ENV_FILE" ]; then
-        cp "$ENV_FILE" "${ENV_FILE}.backup"
-        echo "📋 Created backup: ${ENV_FILE}.backup"
+        if ! grep -q "DT_API_KEY=TEST" "$ENV_FILE"; then
+            cp "$ENV_FILE" "${ENV_FILE}.backup"
+            echo "📋 Created backup: ${ENV_FILE}.backup"
+        else
+            echo "📋 Skipping backup (file contains example data)"
+        fi
     fi
     
     # Update or add DT_API_KEY
