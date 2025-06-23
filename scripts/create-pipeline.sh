@@ -143,6 +143,10 @@ create_pipeline() {
     <script><![CDATA[
     pipeline {
         agent any
+
+        tools {
+            maven 'Maven-3.9' 
+        }
         environment {
             DT_API_URL = 'http://dependency-track-apiserver:8080'
             DT_API_KEY = credentials('dt-api-key')
@@ -150,6 +154,7 @@ create_pipeline() {
             WEBGOAT_TAG = 'v8.1.0'
             PROJECT_NAME = 'WebGoat'
             PROJECT_VERSION = '8.1.0'
+           MAVEN_OPTS = '-Xmx1024m --add-opens java.base/java.lang=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED'
         }
         stages {
             stage('🔄 Checkout WebGoat') {
@@ -227,7 +232,7 @@ create_pipeline() {
                         
                         echo "🔧 Compiling and packaging..."
                         mvn compile package -DskipTests -Dmaven.javadoc.skip=true -q
-                        
+
                         echo "📦 Build Results:"
                         ls -la target/ | grep -E "\\.(war|jar)$" || echo "No packaged artifacts found"
                         
@@ -239,6 +244,125 @@ create_pipeline() {
                             exit 1
                         fi
                     '''
+                }
+            }
+
+            stage('🔍 OWASP Dependency Check') {
+                steps {
+                    echo '🔍 Running OWASP Dependency Check vulnerability scan...'
+                    echo 'ℹ️ This scans all dependencies for known security vulnerabilities'
+                    
+                    script {
+                        try {
+                            dependencyCheck(
+                                additionalArguments: '''
+                                    --format ALL
+                                    --enableRetired
+                                    --enableExperimental
+                                    --failOnCVSS 11
+                                ''',
+                                odcInstallation: 'dependency-check'
+                            )
+                            echo '✅ Dependency Check scan completed'
+                        } catch (Exception e) {
+                            echo "⚠️ Dependency Check found vulnerabilities: ${e.getMessage()}"
+                            echo "ℹ️ This is expected for WebGoat (intentionally vulnerable app)"
+                            echo "✅ Continuing pipeline - vulnerabilities will be tracked in Dependency Track"
+                        }
+                    }
+                    
+                    sh '''
+                        echo "📋 Scan Results Summary:"
+                        if [ -f "dependency-check-report.html" ]; then
+                            echo "✅ HTML report generated"
+                        fi
+                        if [ -f "dependency-check-report.xml" ]; then
+                            echo "✅ XML report generated"  
+                        fi
+                        if [ -f "dependency-check-report.json" ]; then
+                            echo "✅ JSON report generated"
+                        fi
+                    '''
+                }
+            }
+        
+            stage('📋 Generate SBOM') {
+                steps {
+                    echo '📋 Generating CycloneDX Software Bill of Materials...'
+                    echo 'ℹ️ This creates a complete inventory of all application dependencies'
+                    
+                    sh '''
+                        echo "🔧 Running CycloneDX Maven plugin..."
+                        mvn org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom -q
+                        
+                        echo "📊 SBOM Generation Results:"
+                        if [ -f "target/webgoat-bom.json" ]; then
+                            echo "✅ SBOM successfully generated: target/webgoat-bom.json"
+                            echo "📄 SBOM size: $(du -h target/webgoat-bom.json | cut -f1)"
+                            echo "🔢 Components found: $(jq '.components | length' target/webgoat-bom.json 2>/dev/null || echo 'N/A')"
+                        else
+                            echo "❌ SBOM generation failed"
+                            echo "📁 Available files in target:"
+                            ls -la target/
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        
+            stage('⬆️ Upload to Dependency Track') {
+                steps {
+                    echo '⬆️ Uploading SBOM to Dependency Track for vulnerability management...'
+                    echo 'ℹ️ This enables centralized security tracking and monitoring'
+                    
+                    script {
+                        try {
+                            // Create or update project in Dependency Track
+                            def createProjectResponse = httpRequest(
+                                httpMode: 'PUT',
+                                url: "${DT_API_URL}/api/v1/project",
+                                customHeaders: [
+                                    [name: 'X-API-Key', value: DT_API_KEY], 
+                                    [name: 'Content-Type', value: 'application/json']
+                                ],
+                                requestBody: """{
+                                    "name": "${PROJECT_NAME}",
+                                    "version": "${PROJECT_VERSION}",
+                                    "description": "WebGoat v8.1.0 - Intentionally vulnerable application for security scanning demonstration",
+                                    "tags": [
+                                        {"name": "demo"},
+                                        {"name": "webgoat"}, 
+                                        {"name": "security-scan"},
+                                        {"name": "mend-demo"}
+                                    ]
+                                }"""
+                            )
+                            
+                            echo "✅ Project creation/update response: HTTP ${createProjectResponse.status}"
+                            
+                            // Upload SBOM to Dependency Track
+                            def uploadResponse = httpRequest(
+                                httpMode: 'POST',
+                                url: "${DT_API_URL}/api/v1/bom",
+                                customHeaders: [[name: 'X-API-Key', value: DT_API_KEY]],
+                                multipartName: 'bom',
+                                uploadFile: 'target/webgoat-bom.json'
+                            )
+                            
+                            echo "✅ SBOM upload response: HTTP ${uploadResponse.status}"
+                            
+                            if (uploadResponse.status == 200) {
+                                echo "🎉 SBOM successfully uploaded to Dependency Track!"
+                                echo "🌐 View results at: http://localhost:8081"
+                                echo "📊 The SBOM will be processed and vulnerabilities will appear in the dashboard"
+                            }
+                            
+                        } catch (Exception e) {
+                            echo "❌ Failed to upload SBOM to Dependency Track: ${e.getMessage()}"
+                            echo "🔧 Check that Dependency Track is running and API key is correct"
+                            throw e
+                        }
+                    }
                 }
             }
         }

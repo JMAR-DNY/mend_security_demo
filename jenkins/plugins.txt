@@ -1,11 +1,17 @@
 # Core pipeline functionality
 workflow-aggregator
+pipeline-stage-view
+pipeline-model-definition
 
 # Source control
 git
 
 # Build tooling
 maven-plugin
+
+# setup agents using docker
+docker-workflow
+docker-plugin
 
 # Jenkins Configuration as Code
 configuration-as-code
@@ -16,11 +22,11 @@ job-dsl
 # HTTP calls within pipeline
 http_request
 
-# OWASP Dependency-Check for vulnerability scanning
-dependency-check-jenkins-plugin:5.6.1
+# OWASP Dependency-Check for vulnerability scanning (compatible with Jenkins 2.462.3)
+dependency-check-jenkins-plugin:5.4.3
 
-# Dependency-Track plugin for SBOM upload
-dependency-track:6.0.1
+# Dependency-Track plugin for SBOM upload (compatible version)
+dependency-track:4.3.0
 
 # Credentials management (required by other plugins)
 credentials-binding
@@ -28,3 +34,7 @@ plain-credentials
 
 # Matrix authorization management
 matrix-auth
+
+# Additional useful plugins
+timestamper
+build-timeout

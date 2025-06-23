@@ -75,7 +75,7 @@ check_service "Jenkins" 8080 /login
 
 # Give JCasC time to process configuration
 echo "⚙️ Allowing Jenkins Configuration as Code to process..."
-sleep 30
+sleep 10
 
 # Verify our setup
 echo "🔍 Verifying setup..."
