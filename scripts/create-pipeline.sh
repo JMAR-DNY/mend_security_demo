@@ -172,12 +172,12 @@ create_pipeline() {
 
         environment {
             DT_API_URL = 'http://dependency-track-apiserver:8080'
-            DT_API_KEY = credentials('dt-api-key')
-            WEBGOAT_REPO = 'https://github.com/WebGoat/WebGoat.git'
-            WEBGOAT_TAG = 'v8.1.0'
-            PROJECT_NAME = 'WebGoat'
-            PROJECT_VERSION = '8.1.0'
-           MAVEN_OPTS = '-Xmx1024m -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED'
+            DT_API_KEY = "${env.DT_API_KEY}"
+            WEBGOAT_REPO = "${env.WEBGOAT_REPO}"
+            WEBGOAT_TAG = "${env.WEBGOAT_TAG}"
+            PROJECT_NAME = "${env.PROJECT_NAME}"
+            PROJECT_VERSION = "${env.PROJECT_VERSION}"
+            MAVEN_OPTS = '-Xmx1024m -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-opens jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED'
         }
         stages {
             stage('🔄 Checkout WebGoat') {

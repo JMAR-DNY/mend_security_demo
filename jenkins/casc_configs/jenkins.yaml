@@ -44,15 +44,6 @@ tool:
                 - dependencyCheckInstaller:
                     id: "8.2.1" 
 
-credentials:
-  system:
-    domainCredentials:
-      - credentials:
-          - string:
-              scope: GLOBAL
-              id: "dt-api-key"
-              description: "Dependency Track API Key"
-              secret: "odt_0EvOUOJftaK9PHrVIh4yL1LgbAYHLhtJ"
 
 unclassified:
   # Add any plugin-specific or UI-driven configs here

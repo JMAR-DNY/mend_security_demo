@@ -69,6 +69,8 @@ services:
       dockerfile: Dockerfile
     container_name: jenkins
     user: root
+    env_file:
+      - .env
     environment:
       - JAVA_OPTS=${JAVA_OPTS}
       - JENKINS_OPTS=${JENKINS_OPTS}
