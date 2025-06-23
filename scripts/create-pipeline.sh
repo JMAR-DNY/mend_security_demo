@@ -483,11 +483,9 @@ main() {
     echo ""
     echo "🔧 Creating Jenkins resources with CSRF protection..."
     
-    # Create credential with retry logic
-    if ! retry_with_backoff "create_credential"; then
-        echo "⚠️ Failed to create credential, but continuing with pipeline creation"
-        echo "💡 You may need to create the 'dt-api-key' credential manually"
-    fi
+
+    # Skip credential creation - using environment variables instead
+    echo "ℹ️ Skipping credential creation - using environment variables from .env file"
     
     echo ""
     
