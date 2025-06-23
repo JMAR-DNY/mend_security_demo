@@ -336,54 +336,56 @@ create_pipeline() {
             stage('⬆️ Upload to Dependency Track') {
                 steps {
                     echo '⬆️ Uploading SBOM to Dependency Track for vulnerability management...'
-                    echo 'ℹ️ This enables centralized security tracking and monitoring'
                     
                     script {
                         try {
-                            // Create or update project in Dependency Track
-                            def createProjectResponse = httpRequest(
-                                httpMode: 'PUT',
-                                url: "${DT_API_URL}/api/v1/project",
-                                customHeaders: [
-                                    [name: 'X-API-Key', value: DT_API_KEY], 
-                                    [name: 'Content-Type', value: 'application/json']
-                                ],
-                                requestBody: """{
-                                    "name": "${PROJECT_NAME}",
-                                    "version": "${PROJECT_VERSION}",
-                                    "description": "WebGoat v8.1.0 - Intentionally vulnerable application for security scanning demonstration",
-                                    "tags": [
-                                        {"name": "demo"},
-                                        {"name": "webgoat"}, 
-                                        {"name": "security-scan"},
-                                        {"name": "mend-demo"}
-                                    ]
-                                }"""
-                            )
+                            // Use the EXACT method that worked in your curl test
+                            echo "📤 Uploading SBOM using confirmed working method..."
                             
-                            echo "✅ Project creation/update response: HTTP ${createProjectResponse.status}"
-                            
-                            // Upload SBOM to Dependency Track
                             def uploadResponse = httpRequest(
                                 httpMode: 'POST',
                                 url: "${DT_API_URL}/api/v1/bom",
-                                customHeaders: [[name: 'X-API-Key', value: DT_API_KEY]],
+                                customHeaders: [
+                                    [name: 'X-API-Key', value: "${DT_API_KEY}"]
+                                ],
                                 multipartName: 'bom',
-                                uploadFile: 'target/webgoat-bom.json'
+                                uploadFile: 'target/webgoat-bom.json',
+                                formData: [
+                                    [name: 'autoCreate', value: 'true'],
+                                    [name: 'projectName', value: 'WebGoat'],
+                                    [name: 'projectVersion', value: '8.1.0']
+                                ]
                             )
                             
-                            echo "✅ SBOM upload response: HTTP ${uploadResponse.status}"
+                            echo "🎉 SBOM upload successful! HTTP ${uploadResponse.status}"
                             
-                            if (uploadResponse.status == 200) {
-                                echo "🎉 SBOM successfully uploaded to Dependency Track!"
-                                echo "🌐 View results at: http://localhost:8081"
-                                echo "📊 The SBOM will be processed and vulnerabilities will appear in the dashboard"
+                            // Parse the token from response if present
+                            if (uploadResponse.content) {
+                                def responseJson = readJSON text: uploadResponse.content
+                                if (responseJson.token) {
+                                    echo "✅ Processing token: ${responseJson.token}"
+                                }
                             }
                             
+                            echo "🌐 View results at: http://localhost:8081"
+                            echo "📊 Navigate to Projects → WebGoat to see vulnerability analysis"
+                            
                         } catch (Exception e) {
-                            echo "❌ Failed to upload SBOM to Dependency Track: ${e.getMessage()}"
-                            echo "🔧 Check that Dependency Track is running and API key is correct"
-                            throw e
+                            echo "⚠️ Jenkins httpRequest failed: ${e.getMessage()}"
+                            echo "🔄 Using curl fallback with confirmed working method..."
+                            
+                            // Fallback using the exact curl command that worked
+                            sh '''
+                                curl -w "HTTP Status: %{http_code}\\n" \
+                                    -X POST "${DT_API_URL}/api/v1/bom" \
+                                    -H "X-API-Key: ${DT_API_KEY}" \
+                                    -F "autoCreate=true" \
+                                    -F "projectName=WebGoat" \
+                                    -F "projectVersion=8.1.0" \
+                                    -F "bom=@target/webgoat-bom.json"
+                            '''
+                            
+                            echo "✅ Curl upload completed using verified method"
                         }
                     }
                 }

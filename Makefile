@@ -47,6 +47,23 @@ restart:
 	docker-compose restart
 	@echo "✅ Services restarted"
 
+restart-env:
+	@echo "🔄 Restarting services with fresh environment variables..."
+	@echo "💡 This fixes issues where Jenkins doesn't pick up .env changes"
+	@echo ""
+	@echo "📋 Current API key status:"
+	@grep "^DT_API_KEY=" .env 2>/dev/null | sed 's/DT_API_KEY=.*/DT_API_KEY=***[REDACTED]***/' || echo "❌ No DT_API_KEY found in .env"
+	@echo ""
+	@echo "🛑 Stopping containers for clean restart..."
+	docker-compose down
+	@echo "🚀 Starting with fresh environment..."
+	docker-compose up -d
+	@echo "⏳ Waiting for services to initialize..."
+	@sleep 30
+	@echo "🔍 Verifying Jenkins has the API key..."
+	@docker exec jenkins printenv DT_API_KEY | head -c 20 2>/dev/null && echo "..." || echo "❌ DT_API_KEY not found in Jenkins container"
+	@echo "✅ Environment restart complete!"
+
 logs:
 	@echo "📋 Showing logs from all services (Ctrl+C to exit)..."
 	docker-compose logs -f

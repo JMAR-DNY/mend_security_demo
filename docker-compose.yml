@@ -2,6 +2,7 @@ services:
   dependency-track-apiserver:
     image: dependencytrack/apiserver:latest
     container_name: dt-apiserver
+    privileged: true  # Add this for SSL certificate modifications
     environment:
       - ALPINE_DATABASE_MODE=external
       - ALPINE_DATABASE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -23,9 +24,16 @@ services:
       - ALPINE_API_KEY_DEFAULT=${DT_API_KEY}
       - ALPINE_DEFAULT_ADMIN_USERNAME=${DT_ADMIN_USER}
       - ALPINE_DEFAULT_ADMIN_PASSWORD=${DT_ADMIN_PASSWORD}
+      
+      # Nuclear SSL bypass options
+      - JAVA_OPTS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true -Dcom.sun.net.ssl.allowUnsafeServerCertChange=true -Dcom.sun.net.ssl.allowUnsafeRenegotiation=true -Djdk.tls.allowUnsafeServerCertChange=true
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true
+      - ALPINE_TLS_TRUST_ALL_CERTS=true
+      - CURL_CA_BUNDLE=""
+      - SSL_VERIFY=false
+      
     env_file:
       - .env
-
     volumes:
       - 'dt-data:/data'
       - 'dt-tmp:/tmp'
