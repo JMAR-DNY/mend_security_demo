@@ -333,14 +333,16 @@ create_pipeline() {
                 }
             }
         
+
             stage('⬆️ Upload to Dependency Track') {
                 steps {
                     echo '⬆️ Uploading SBOM to Dependency Track for vulnerability management...'
+                    echo 'ℹ️ This enables centralized security tracking and monitoring'
                     
                     script {
                         try {
-                            // Use the EXACT method that worked in your curl test
-                            echo "📤 Uploading SBOM using confirmed working method..."
+                            // Upload SBOM to existing WebGoat project
+                            echo "📤 Uploading SBOM to existing WebGoat project..."
                             
                             def uploadResponse = httpRequest(
                                 httpMode: 'POST',
@@ -372,10 +374,11 @@ create_pipeline() {
                             
                         } catch (Exception e) {
                             echo "⚠️ Jenkins httpRequest failed: ${e.getMessage()}"
-                            echo "🔄 Using curl fallback with confirmed working method..."
+                            echo "🔄 Using curl fallback for SBOM upload..."
                             
-                            // Fallback using the exact curl command that worked
+                            // Fallback: Upload SBOM via curl
                             sh '''
+                                echo "📤 Uploading SBOM via curl..."
                                 curl -w "HTTP Status: %{http_code}\\n" \
                                     -X POST "${DT_API_URL}/api/v1/bom" \
                                     -H "X-API-Key: ${DT_API_KEY}" \

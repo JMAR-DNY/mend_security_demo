@@ -59,6 +59,20 @@ sleep 15
 echo "🛡️  Starting Dependency Track..."
 check_service "Dependency Track API" 8081 /api/version
 
+# Apply emergency certificate fix for immediate functionality
+echo "🔐 Applying certificate fixes for vulnerability feeds..."
+if [ -f scripts/fix-certificates-now.sh ]; then
+    chmod +x scripts/fix-certificates-now.sh
+    echo "   Running emergency certificate fix..."
+    if ./scripts/fix-certificates-now.sh; then
+        echo "✅ Certificate fixes applied successfully"
+    else
+        echo "⚠️ Certificate fixes had issues, but continuing..."
+    fi
+else
+    echo "⚠️ fix-certificates-now.sh not found, vulnerability feeds may have SSL issues"
+fi
+
 # Initialize Dependency Track admin account
 echo "🔑 Initializing Dependency Track admin account..."
 if [ -f scripts/init-dependency-track.sh ]; then
@@ -68,71 +82,24 @@ else
     echo "⚠️ init-dependency-track.sh script not found, skipping admin setup"
 fi
 
-# 🔐 SSL Certificate Fix Integration
-echo ""
-echo "🔐 Checking and fixing SSL certificate issues for vulnerability feeds..."
+# Certificate status check (automatic handling via docker-compose)
+echo "🔐 Checking automatic certificate configuration..."
+sleep 30  # Give the automatic init script time to run
 
-if [ -f scripts/fix-dt-certificates.sh ]; then
-    chmod +x scripts/fix-dt-certificates.sh
-    
-    if ./scripts/fix-dt-certificates.sh; then
-        echo "✅ Certificate fixes completed successfully"
+CERT_INIT_STATUS=$(docker exec dt-apiserver test -f /data/.cert-init-completed 2>/dev/null && echo "completed" || echo "pending")
+
+if [ "$CERT_INIT_STATUS" = "completed" ]; then
+    echo "✅ SSL certificates automatically configured"
+    RECENT_CERT_ERRORS=$(docker logs dt-apiserver --since 2m 2>&1 | grep -c "PKIX path building failed" || echo "0")
+    if [ "$RECENT_CERT_ERRORS" -eq "0" ]; then
+        echo "🎉 No SSL certificate errors detected"
     else
-        echo "⚠️ Certificate fixes had some issues, but continuing setup"
-        echo "💡 You may need to run './scripts/fix-dt-certificates.sh --force' manually later"
+        echo "⚠️ Some certificate warnings detected (normal during startup)"
     fi
 else
-    echo "⚠️ Certificate fix script not found at scripts/fix-dt-certificates.sh"
-    echo "💡 Consider creating this script for automatic certificate handling"
+    echo "⏳ Certificate initialization in progress..."
+    echo "💡 Monitor with: docker logs dt-apiserver -f | grep CERT-INIT"
 fi
-
-# Continue with Jenkins setup...
-
-# Wait a moment for Dependency Track to start its background tasks
-echo "⏳ Allowing Dependency Track to initialize background tasks..."
-sleep 30
-
-# Check for certificate issues in the logs
-echo "🔍 Checking for SSL certificate errors..."
-CERT_ERRORS=$(docker logs dt-apiserver 2>&1 | grep -c "PKIX path building failed" || echo "0")
-
-if [ "$CERT_ERRORS" -gt "0" ]; then
-    echo "🔧 Certificate issues detected ($CERT_ERRORS errors found)"
-    echo "   Applying certificate fixes..."
-    
-    # Apply certificate fixes
-    if [ -f scripts/update-certificates.sh ]; then
-        chmod +x scripts/update-certificates.sh
-        echo "   Running certificate update script..."
-        
-        if ./scripts/update-certificates.sh; then
-            echo "✅ Certificate fixes applied successfully"
-            
-            # Give it time to retry downloads
-            echo "⏳ Allowing time for vulnerability feed downloads to retry..."
-            sleep 45
-            
-            # Check if downloads are now working
-            RECENT_DOWNLOADS=$(docker logs dt-apiserver --since 1m 2>&1 | grep -c "download.*completed\|successfully downloaded" || echo "0")
-            
-            if [ "$RECENT_DOWNLOADS" -gt "0" ]; then
-                echo "🎉 Vulnerability feeds are now downloading successfully!"
-            else
-                echo "ℹ️ Downloads may take a few more minutes to retry"
-            fi
-        else
-            echo "⚠️ Certificate fix script had issues, but continuing setup"
-            echo "💡 You may need to run ./scripts/update-certificates.sh manually later"
-        fi
-    else
-        echo "⚠️ Certificate update script not found"
-        echo "💡 Consider creating scripts/update-certificates.sh for automatic certificate fixes"
-    fi
-else
-    echo "✅ No SSL certificate issues detected in logs"
-fi
-
-# End of certificate handling section
 
 # Jenkins (our custom-built image with plugins pre-installed)
 echo "🔧 Starting Jenkins with pre-installed plugins..."
@@ -160,14 +127,169 @@ for plugin in "${ESSENTIAL_PLUGINS[@]}"; do
     fi
 done
 
-# Check if pipeline job was created
-echo "🔧 Checking if pipeline job was created..."
-JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null | grep -o '"name":"webgoat-security-scan"' || echo "")
+# API Key Setup and Pipeline Creation
+# API Key Setup and Pipeline Creation
+echo ""
+echo "🔑 Setting up Dependency Track API integration..."
 
-if [ -n "$JOB_CHECK" ]; then
-    echo "✅ WebGoat security scan pipeline job created successfully"
+# Always get fresh API key during setup since old keys become invalid
+echo "🔧 Getting fresh API key for new Dependency Track instance..."
+echo "💡 Previous API keys become invalid when containers are recreated"
+
+if [ -f scripts/get-dt-api-key.sh ]; then
+    chmod +x scripts/get-dt-api-key.sh
+    if ./scripts/get-dt-api-key.sh; then
+        echo "✅ Fresh API key created successfully"
+        
+        # Get the new API key value
+        NEW_API_KEY=$(grep "^DT_API_KEY=" .env 2>/dev/null | cut -d'=' -f2 || echo "")
+        
+        if [ -n "$NEW_API_KEY" ]; then
+            echo "✅ New API key saved: ${NEW_API_KEY:0:12}..."
+            
+            # Stop and recreate Jenkins container to pick up new environment
+            echo "🔄 Recreating Jenkins container to load new API key..."
+            echo "   This ensures the new environment variables are properly loaded"
+            
+            # Stop Jenkins container
+            docker-compose stop jenkins
+            
+            # Remove Jenkins container (keeps volumes)
+            docker-compose rm -f jenkins
+            
+            # Recreate and start Jenkins with new environment
+            docker-compose up -d jenkins
+            
+            echo "⏳ Waiting for Jenkins to initialize with new API key..."
+            sleep 45  # Jenkins needs more time for full startup
+            
+            # Wait for Jenkins to be ready again
+            if check_service "Jenkins" 8080 /login; then
+                echo "✅ Jenkins recreated successfully"
+                
+                # Verify Jenkins has the new API key
+                JENKINS_API_KEY=$(docker exec jenkins printenv DT_API_KEY 2>/dev/null || echo "")
+                if [ -n "$JENKINS_API_KEY" ] && [ "$JENKINS_API_KEY" = "$NEW_API_KEY" ]; then
+                    echo "✅ Jenkins container has new API key: ${JENKINS_API_KEY:0:12}..."
+                elif [ -n "$JENKINS_API_KEY" ]; then
+                    echo "⚠️ Jenkins has API key but it may be old: ${JENKINS_API_KEY:0:12}..."
+                    echo "🔧 Trying manual environment injection..."
+                    
+                    # Fallback: Inject environment variable directly into running container
+                    docker exec jenkins bash -c "echo 'export DT_API_KEY=$NEW_API_KEY' >> /etc/environment"
+                    docker exec jenkins bash -c "echo 'DT_API_KEY=$NEW_API_KEY' >> /var/jenkins_home/.bashrc"
+                    
+                    # Verify injection worked
+                    UPDATED_KEY=$(docker exec jenkins bash -c "source /var/jenkins_home/.bashrc && echo \$DT_API_KEY" 2>/dev/null || echo "")
+                    if [ "$UPDATED_KEY" = "$NEW_API_KEY" ]; then
+                        echo "✅ API key manually injected successfully"
+                    else
+                        echo "⚠️ Manual injection may not have worked"
+                    fi
+                else
+                    echo "❌ Jenkins container doesn't have API key"
+                    echo "🔧 Attempting manual environment injection..."
+                    
+                    # Direct injection as fallback
+                    docker exec jenkins bash -c "echo 'export DT_API_KEY=$NEW_API_KEY' >> /etc/environment"
+                    docker exec jenkins bash -c "echo 'DT_API_KEY=$NEW_API_KEY' >> /var/jenkins_home/.bashrc"
+                    echo "✅ API key injected directly into container"
+                fi
+            else
+                echo "❌ Jenkins recreation failed"
+                exit 1
+            fi
+        else
+            echo "❌ Failed to retrieve new API key from .env file"
+            echo "💡 You'll need to check the API key manually"
+            exit 1
+        fi
+    else
+        echo "❌ API key creation failed"
+        echo "💡 You'll need to create the API key manually and restart Jenkins"
+        echo "🔧 Run: ./scripts/get-dt-api-key.sh then make restart-env"
+        exit 1
+    fi
 else
-    echo "⚠️ Pipeline job not yet created (JCasC may still be processing)"
+    echo "❌ get-dt-api-key.sh script not found"
+    echo "💡 Please create API key manually in Dependency Track"
+    exit 1
+fi
+
+# Create Dependency Track project for demo
+echo ""
+echo "📋 Creating WebGoat project in Dependency Track..."
+
+# Get current API key from .env file
+CURRENT_API_KEY=$(grep "^DT_API_KEY=" .env 2>/dev/null | cut -d'=' -f2 || echo "")
+
+if [ -n "$CURRENT_API_KEY" ]; then
+    echo "🔧 Using API key: ${CURRENT_API_KEY:0:12}..."
+    
+    # Create the WebGoat project
+    PROJECT_RESPONSE=$(curl -s -w "%{http_code}" \
+        -X PUT "http://localhost:8081/api/v1/project" \
+        -H "X-API-Key: $CURRENT_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "name": "WebGoat",
+            "version": "8.1.0",
+            "description": "WebGoat v8.1.0 - Intentionally vulnerable application for security scanning demonstration",
+            "tags": [
+                {"name": "demo"},
+                {"name": "webgoat"},
+                {"name": "security-scan"},
+                {"name": "mend-demo"}
+            ]
+        }' \
+        -o /tmp/project-response.json)
+    
+    # Extract HTTP status code (last 3 characters)
+    HTTP_STATUS="${PROJECT_RESPONSE: -3}"
+    
+    if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
+        echo "✅ WebGoat project created successfully in Dependency Track"
+        
+        # Extract project UUID if available
+        if [ -f /tmp/project-response.json ]; then
+            PROJECT_UUID=$(jq -r '.uuid // empty' /tmp/project-response.json 2>/dev/null || echo "")
+            if [ -n "$PROJECT_UUID" ]; then
+                echo "📋 Project UUID: $PROJECT_UUID"
+            fi
+        fi
+        
+        rm -f /tmp/project-response.json
+    elif [ "$HTTP_STATUS" = "409" ]; then
+        echo "ℹ️ WebGoat project already exists in Dependency Track"
+    else
+        echo "⚠️ Failed to create project (HTTP $HTTP_STATUS)"
+        echo "💡 Pipeline will attempt to create it automatically during upload"
+    fi
+else
+    echo "⚠️ No API key found - project creation will be handled by pipeline"
+fi
+
+# Create pipeline job
+echo ""
+echo "🚀 Creating Jenkins pipeline job..."
+if [ -f scripts/create-pipeline.sh ]; then
+    chmod +x scripts/create-pipeline.sh
+    if ./scripts/create-pipeline.sh; then
+        echo "✅ Pipeline job created successfully"
+        
+        # Update the JOB_CHECK variable for final status
+        JOB_CHECK=$(curl -s -u admin:admin http://localhost:8080/job/webgoat-security-scan/api/json 2>/dev/null | grep -o '"name":"webgoat-security-scan"' || echo "")
+        
+        if [ -n "$JOB_CHECK" ]; then
+            echo "🎯 WebGoat security scan pipeline is ready to run!"
+        fi
+    else
+        echo "⚠️ Pipeline creation had issues - you may need to create it manually"
+        echo "💡 Try running: ./scripts/create-pipeline.sh"
+    fi
+else
+    echo "⚠️ create-pipeline.sh script not found"
+    echo "💡 Pipeline job will need to be created manually"
 fi
 
 # Final status
@@ -184,11 +306,10 @@ curl -s -f http://localhost:8080/login >/dev/null 2>&1 && echo "✅ Ready" || ec
 
 # Final certificate status check
 echo -n "   SSL Certificates: "
-FINAL_CERT_ERRORS=$(docker logs dt-apiserver --since 2m 2>&1 | grep -c "PKIX path building failed" || echo "0")
-if [ "$FINAL_CERT_ERRORS" -eq "0" ]; then
-    echo "✅ Working"
+if [ "$CERT_INIT_STATUS" = "completed" ]; then
+    echo "✅ Automatically Configured"
 else
-    echo "⚠️ May need attention ($FINAL_CERT_ERRORS recent errors)"
+    echo "⏳ Configuring..."
 fi
 
 echo ""

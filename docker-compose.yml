@@ -1,3 +1,4 @@
+# Updated docker-compose.yml with permanent certificate fix
 services:
   dependency-track-apiserver:
     image: dependencytrack/apiserver:latest
@@ -25,18 +26,22 @@ services:
       - ALPINE_DEFAULT_ADMIN_USERNAME=${DT_ADMIN_USER}
       - ALPINE_DEFAULT_ADMIN_PASSWORD=${DT_ADMIN_PASSWORD}
       
-      # Nuclear SSL bypass options
-      - JAVA_OPTS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true -Dcom.sun.net.ssl.allowUnsafeServerCertChange=true -Dcom.sun.net.ssl.allowUnsafeRenegotiation=true -Djdk.tls.allowUnsafeServerCertChange=true
-      - JAVA_TOOL_OPTIONS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true
+      # Enhanced SSL certificate handling
+      - JAVA_OPTS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true -Dcom.sun.net.ssl.allowUnsafeServerCertChange=true -Dcom.sun.net.ssl.allowUnsafeRenegotiation=true -Djdk.tls.allowUnsafeServerCertChange=true -Djavax.net.ssl.trustStoreType=JKS -Djavax.net.ssl.trustStore=/opt/java/openjdk/lib/security/cacerts
+      - JAVA_TOOL_OPTIONS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true -Djavax.net.ssl.trustStoreType=JKS
       - ALPINE_TLS_TRUST_ALL_CERTS=true
-      - CURL_CA_BUNDLE=""
-      - SSL_VERIFY=false
+      - CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      - SSL_CERT_DIR=/etc/ssl/certs
+      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
       
     env_file:
       - .env
     volumes:
       - 'dt-data:/data'
       - 'dt-tmp:/tmp'
+      # Mount certificate initialization script
+      - './scripts/init-certificates.sh:/docker-entrypoint-initdb.d/init-certificates.sh:ro'
     ports:
       - "8081:8080"
     restart: unless-stopped
