@@ -2,7 +2,7 @@ services:
   dependency-track-apiserver:
     image: dependencytrack/apiserver:latest
     container_name: dt-apiserver
-    privileged: true  # Add this for SSL certificate modifications
+    privileged: true
     environment:
       - ALPINE_DATABASE_MODE=external
       - ALPINE_DATABASE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -130,4 +130,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: ${NETWORK_SUBNET}
+        - subnet: ${NETWORK_SUBNET:-172.20.0.0/16}

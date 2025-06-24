@@ -1,6 +1,0 @@
-<org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>
-  <scope>GLOBAL</scope>
-  <id>dt-api-key</id>
-  <description>Dependency Track API Key for SBOM upload</description>
-  <secret>odt_0EvOUOJftaK9PHrVIh4yL1LgbAYHLhtJ</secret>
-</org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>
