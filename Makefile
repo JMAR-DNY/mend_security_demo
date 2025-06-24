@@ -1,8 +1,9 @@
-.PHONY: help setup start stop restart logs clean demo health-check status verify-plugins
+.PHONY: help setup start stop restart logs clean demo health-check status verify-plugins check-db check-cert check-fuzzy check-feeds check-api check-pipeline monitor debug-all
 
 help:
 	@echo "🔧 Mend Security Demo - Available Commands:"
 	@echo ""
+	@echo "🚀 Core Commands:"
 	@echo "  setup        - Complete setup with runtime plugin installation (7-10 min)"
 	@echo "  start        - Start all services"
 	@echo "  stop         - Stop all services"
@@ -10,9 +11,19 @@ help:
 	@echo "  logs         - Show logs from all services"
 	@echo "  clean        - Stop and remove all containers and volumes"
 	@echo "  demo         - Instructions for running the security scan demo"
+	@echo ""
+	@echo "🔍 Diagnostics & Monitoring:"
 	@echo "  health-check - Check if all services are healthy"
 	@echo "  status       - Show current status of all services"
 	@echo "  verify-plugins - Check if Jenkins plugins are installed"
+	@echo "  check-db     - Show Dependency Track database size and stats"
+	@echo "  check-cert   - Monitor certificate and download issues"
+	@echo "  check-fuzzy  - Verify fuzzy analyzer settings"
+	@echo "  check-feeds  - Check vulnerability feed download status"
+	@echo "  check-api    - Test Dependency Track API connectivity"
+	@echo "  check-pipeline - Verify Jenkins pipeline job status"
+	@echo "  monitor      - Real-time monitoring dashboard"
+	@echo "  debug-all    - Run comprehensive diagnostics"
 	@echo ""
 	@echo "🚀 Quick Start:"
 	@echo "  1. make setup    (installs plugins at runtime, creates pipeline job)"
@@ -207,3 +218,170 @@ verify-plugins:
 	@echo "   • Run: make restart"
 	@echo "   • Wait for full initialization"
 	@echo "   • Check: make logs"
+
+check-db:
+	@echo "🗄️ Dependency Track Database Status:"
+	@echo ""
+	@echo "📊 Database Size:"
+	@docker exec dt-postgres psql -U dtrack -d dtrack -c "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size;" 2>/dev/null || echo "❌ Could not connect to database"
+	@echo ""
+	@echo "📋 Table Statistics:"
+	@docker exec dt-postgres psql -U dtrack -d dtrack -c "\
+		SELECT \
+			schemaname, \
+			tablename, \
+			pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size, \
+			pg_total_relation_size(schemaname||'.'||tablename) as bytes \
+		FROM pg_tables \
+		WHERE schemaname = 'public' \
+		ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC \
+		LIMIT 10;" 2>/dev/null || echo "❌ Could not get table statistics"
+	@echo ""
+	@echo "💡 Database Health Indicators:"
+	@echo "   • Healthy size: 200MB+ (indicates vulnerability feeds downloaded)"
+	@echo "   • Problem size: Repeated calls same size means feed is stuck"
+	@echo "   • Fresh install: <20MB (feeds not yet started)"
+
+check-cert:
+	@echo "🔐 Certificate and Download Status Monitor:"
+	@echo "💡 Press Ctrl+C to exit monitoring"
+	@echo ""
+	@docker logs dt-apiserver --since 10m 2>&1 | grep -E "(download|error|failed|certificate|PKIX)" | tail -20 || echo "❌ No certificate/download logs found"
+	@echo ""
+	@echo "🔍 Real-time monitoring (last 50 lines, updates every 5 seconds):"
+	@docker logs -f dt-apiserver | grep -E "(download|error|failed|certificate|PKIX|SSL)"
+
+check-fuzzy:
+	@echo "🔍 Fuzzy Analyzer Configuration Status:"
+	@echo ""
+	@echo "📋 Environment Variables in Container:"
+	@docker exec dt-apiserver printenv | grep -E "(FUZZY|ANALYZER)" | sort || echo "❌ No fuzzy analyzer environment variables found"
+	@echo ""
+	@echo "🔧 API Configuration Status:"
+	@API_KEY=$$(grep "^DT_API_KEY=" .env 2>/dev/null | cut -d'=' -f2); \
+	if [ -n "$$API_KEY" ]; then \
+		echo "Using API key: $${API_KEY:0:12}..."; \
+		curl -s -H "X-API-Key: $$API_KEY" "http://localhost:8081/api/v1/configProperty" | \
+		jq -r '.[] | select(.propertyName | contains("analyzer")) | select(.propertyName | contains("fuzzy")) | "🎯 \(.propertyName): \(.propertyValue)"' 2>/dev/null || \
+		echo "❌ Could not retrieve fuzzy analyzer settings via API"; \
+	else \
+		echo "❌ No API key found in .env file"; \
+	fi
+	@echo ""
+	@echo "💡 To enable fuzzy analyzers if disabled:"
+	@echo "   • Run: ./scripts/force-fuzzy-analyzers.sh (if available)"
+	@echo "   • Or manually enable in Dependency Track UI"
+
+check-feeds:
+	@echo "📥 Vulnerability Feed Download Status:"
+	@echo ""
+	@echo "🔍 Recent Feed Activity (last 30 minutes):"
+	@docker logs dt-apiserver --since 30m 2>&1 | grep -E "(feed|download|vulnerability|NVD|OSV)" | tail -10 || echo "❌ No recent feed activity found"
+	@echo ""
+	@echo "📊 Feed Download Indicators:"
+	@echo "   ✅ Good: 'Successfully downloaded' or 'Processing feeds'"
+	@echo "   ⚠️  Issue: 'PKIX path building failed' or 'SSL handshake'"
+	@echo "   ❌ Problem: 'Connection refused' or 'timeout'"
+	@echo ""
+	@echo "🗄️ Database size (feed download indicator):"
+	@docker exec dt-postgres psql -U dtrack -d dtrack -c "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size;" 2>/dev/null || echo "❌ Could not check database size"
+
+check-api:
+	@echo "🔗 Dependency Track API Connectivity Test:"
+	@echo ""
+	@echo "🔍 Basic API Health:"
+	@curl -s -w "HTTP Status: %{http_code}\nResponse Time: %{time_total}s\n" \
+		http://localhost:8081/api/version 2>/dev/null || echo "❌ API not accessible"
+	@echo ""
+	@echo "🔑 API Key Test:"
+	@API_KEY=$$(grep "^DT_API_KEY=" .env 2>/dev/null | cut -d'=' -f2); \
+	if [ -n "$$API_KEY" ]; then \
+		echo "Testing API key: $${API_KEY:0:12}..."; \
+		RESPONSE=$$(curl -s -w "%{http_code}" -H "X-API-Key: $$API_KEY" \
+			"http://localhost:8081/api/v1/project" -o /tmp/api-test.json); \
+		if [ "$$RESPONSE" = "200" ]; then \
+			echo "✅ API key valid"; \
+			PROJECT_COUNT=$$(jq length /tmp/api-test.json 2>/dev/null || echo "unknown"); \
+			echo "📋 Projects in Dependency Track: $$PROJECT_COUNT"; \
+		else \
+			echo "❌ API key invalid (HTTP $$RESPONSE)"; \
+		fi; \
+		rm -f /tmp/api-test.json; \
+	else \
+		echo "❌ No API key found in .env file"; \
+	fi
+
+check-pipeline:
+	@echo "🚀 Jenkins Pipeline Job Status:"
+	@echo ""
+	@echo "🔍 Job Existence Check:"
+	@JOB_STATUS=$$(curl -s -u admin:admin "http://localhost:8080/job/webgoat-security-scan/api/json" 2>/dev/null); \
+	if echo "$$JOB_STATUS" | grep -q '"name"'; then \
+		echo "✅ Pipeline job 'webgoat-security-scan' exists"; \
+		LAST_BUILD=$$(echo "$$JOB_STATUS" | jq -r '.lastBuild.number // "never"' 2>/dev/null); \
+		echo "📋 Last build number: $$LAST_BUILD"; \
+		if [ "$$LAST_BUILD" != "never" ] && [ "$$LAST_BUILD" != "null" ]; then \
+			BUILD_STATUS=$$(echo "$$JOB_STATUS" | jq -r '.lastBuild.result // "RUNNING"' 2>/dev/null); \
+			echo "📊 Last build result: $$BUILD_STATUS"; \
+		fi; \
+	else \
+		echo "❌ Pipeline job 'webgoat-security-scan' not found"; \
+		echo "💡 Create it with: ./scripts/create-pipeline.sh"; \
+	fi
+	@echo ""
+	@echo "🔑 Jenkins API Access:"
+	@curl -s -u admin:admin "http://localhost:8080/api/json" >/dev/null 2>&1 && \
+		echo "✅ Jenkins API accessible with admin credentials" || \
+		echo "❌ Cannot access Jenkins API"
+
+monitor:
+	@echo "📊 Real-Time Dependency Track Monitoring Dashboard"
+	@echo "💡 Press Ctrl+C to exit"
+	@echo ""
+	@while true; do \
+		clear; \
+		echo "🕐 $$(date)"; \
+		echo ""; \
+		echo "📊 Service Status:"; \
+		docker-compose ps --format "table {{.Name}}\t{{.Status}}" | head -4; \
+		echo ""; \
+		echo "🗄️ Database Size:"; \
+		docker exec dt-postgres psql -U dtrack -d dtrack -c "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size;" 2>/dev/null | grep -v "db_size" | grep -v "^-" || echo "❌ DB Error"; \
+		echo ""; \
+		echo "🔐 Recent Activity (last 5 minutes):"; \
+		docker logs dt-apiserver --since 5m 2>&1 | grep -E "(download|error|failed|SUCCESS)" | tail -3 || echo "No recent activity"; \
+		echo ""; \
+		echo "🔄 Refreshing in 10 seconds..."; \
+		sleep 10; \
+	done
+
+debug-all:
+	@echo "🔬 Comprehensive System Diagnostics"
+	@echo "======================================"
+	@echo ""
+	@echo "🐳 Docker Status:"
+	@docker-compose ps
+	@echo ""
+	@echo "🗄️ Database Status:"
+	@make check-db
+	@echo ""
+	@echo "🔐 Certificate Status:"
+	@docker logs dt-apiserver --since 10m 2>&1 | grep -E "(certificate|PKIX|SSL)" | tail -5 || echo "No certificate issues found"
+	@echo ""
+	@echo "🔍 Fuzzy Analyzer Status:"
+	@make check-fuzzy
+	@echo ""
+	@echo "🔗 API Connectivity:"
+	@make check-api
+	@echo ""
+	@echo "🚀 Pipeline Status:"
+	@make check-pipeline
+	@echo ""
+	@echo "💾 Disk Usage:"
+	@docker system df
+	@echo ""
+	@echo "🔧 Quick Fixes:"
+	@echo "   • Database stuck at 65MB: make restart (fixes certificate issues)"
+	@echo "   • Missing plugins: make verify-plugins"
+	@echo "   • API issues: Check .env file and make restart-env"
+	@echo "   • Pipeline missing: ./scripts/create-pipeline.sh"

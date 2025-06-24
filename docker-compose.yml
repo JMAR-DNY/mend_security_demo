@@ -25,7 +25,10 @@ services:
       - ALPINE_API_KEY_DEFAULT=${DT_API_KEY}
       - ALPINE_DEFAULT_ADMIN_USERNAME=${DT_ADMIN_USER}
       - ALPINE_DEFAULT_ADMIN_PASSWORD=${DT_ADMIN_PASSWORD}
-      
+      - DT_INTERNAL_ANALYZER_FUZZY_ENABLED=${DT_INTERNAL_ANALYZER_FUZZY_ENABLED}
+      - DT_INTERNAL_ANALYZER_FUZZY_PURL_ENABLED=${DT_INTERNAL_ANALYZER_FUZZY_PURL_ENABLED}
+      - DT_INTERNAL_ANALYZER_FUZZY_INTERNAL_ENABLED=${DT_INTERNAL_ANALYZER_FUZZY_INTERNAL_ENABLED}
+
       # Enhanced SSL certificate handling
       - JAVA_OPTS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true -Dcom.sun.net.ssl.allowUnsafeServerCertChange=true -Dcom.sun.net.ssl.allowUnsafeRenegotiation=true -Djdk.tls.allowUnsafeServerCertChange=true -Djavax.net.ssl.trustStoreType=JKS -Djavax.net.ssl.trustStore=/opt/java/openjdk/lib/security/cacerts
       - JAVA_TOOL_OPTIONS=-Dcom.sun.net.ssl.checkRevocation=false -Dtrust_all_cert=true -Djavax.net.ssl.trustStoreType=JKS

@@ -1,28 +1,6 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Setting up Mend Security Demo with pre-built Jenkins image..."
-
-# Check prerequisites
-echo "📋 Checking prerequisites..."
-command -v docker >/dev/null 2>&1 || { echo "❌ Docker is required but not installed. Aborting." >&2; exit 1; }
-command -v docker-compose >/dev/null 2>&1 || { echo "❌ Docker Compose is required but not installed. Aborting." >&2; exit 1; }
-
-# Create necessary directories
-echo "📁 Creating directory structure..."
-mkdir -p jenkins/casc_configs workspace reports
-
-# Make scripts executable
-chmod +x scripts/*.sh 2>/dev/null || echo "Scripts already executable"
-
-# Build and start services
-echo "🔨 Building custom Jenkins image with pre-installed plugins..."
-echo "   This ensures reliable plugin installation and avoids runtime issues"
-docker-compose build jenkins
-
-echo "🐳 Starting all services..."
-docker-compose up -d
-
 # Function to check service health
 check_service() {
     local service_name=$1
@@ -48,30 +26,48 @@ check_service() {
     return 1
 }
 
-# Wait for services in dependency order
-echo "🔄 Waiting for services to initialize..."
+echo "🚀 Setting up Mend Security Demo with pre-built Jenkins image..."
 
-# PostgreSQL first (dependency for Dependency Track)
-echo "🗄️  Starting PostgreSQL..."
+# Check prerequisites
+echo "📋 Checking prerequisites..."
+command -v docker >/dev/null 2>&1 || { echo "❌ Docker is required but not installed. Aborting." >&2; exit 1; }
+command -v docker-compose >/dev/null 2>&1 || { echo "❌ Docker Compose is required but not installed. Aborting." >&2; exit 1; }
+
+# Create necessary directories
+echo "📁 Creating directory structure..."
+mkdir -p jenkins/casc_configs workspace reports
+
+# Make scripts executable
+chmod +x scripts/*.sh 2>/dev/null || echo "Scripts already executable"
+
+# Build and start services
+echo "🔨 Building custom Jenkins image with pre-installed plugins..."
+echo "   This ensures reliable plugin installation and avoids runtime issues"
+docker-compose build jenkins
+
+echo "🐳 Starting all services..."
+docker-compose up -d
+
+# Wait for PostgreSQL
+echo "🗄️ PostgreSQL starting..."
 sleep 15
 
-# Dependency Track API (needs PostgreSQL)
-echo "🛡️  Starting Dependency Track..."
+# Wait for basic DT API (but not full readiness)
+echo "🛡️ Dependency Track starting..."
+until curl -s http://localhost:8081/api/version >/dev/null 2>&1; do
+    echo "   Waiting for API..."
+    sleep 5
+done
+
+# 🎯 IMMEDIATELY apply certificate fix BEFORE feeds start downloading
+echo "🔐 Applying certificate fixes BEFORE vulnerability downloads begin..."
+if [ -f scripts/fix-certificates-now.sh ]; then
+    ./scripts/fix-certificates-now.sh
+fi
+
+# NOW wait for full service readiness
 check_service "Dependency Track API" 8081 /api/version
 
-# Apply emergency certificate fix for immediate functionality
-echo "🔐 Applying certificate fixes for vulnerability feeds..."
-if [ -f scripts/fix-certificates-now.sh ]; then
-    chmod +x scripts/fix-certificates-now.sh
-    echo "   Running emergency certificate fix..."
-    if ./scripts/fix-certificates-now.sh; then
-        echo "✅ Certificate fixes applied successfully"
-    else
-        echo "⚠️ Certificate fixes had issues, but continuing..."
-    fi
-else
-    echo "⚠️ fix-certificates-now.sh not found, vulnerability feeds may have SSL issues"
-fi
 
 # Initialize Dependency Track admin account
 echo "🔑 Initializing Dependency Track admin account..."
@@ -151,14 +147,15 @@ if [ -f scripts/get-dt-api-key.sh ]; then
             echo "🔄 Recreating Jenkins container to load new API key..."
             echo "   This ensures the new environment variables are properly loaded"
             
-            # Stop Jenkins container
-            docker-compose stop jenkins
-            
-            # Remove Jenkins container (keeps volumes)
-            docker-compose rm -f jenkins
-            
-            # Recreate and start Jenkins with new environment
-            docker-compose up -d jenkins
+            # Stop only Jenkins (not dependencies)
+            docker stop jenkins 2>/dev/null || true
+
+            # Remove only Jenkins container (preserves volumes)
+            docker rm jenkins 2>/dev/null || true
+
+            # Start only Jenkins with new environment
+            echo "🚀 Starting Jenkins with new API key..."
+            docker-compose up -d --no-deps jenkins
             
             echo "⏳ Waiting for Jenkins to initialize with new API key..."
             sleep 45  # Jenkins needs more time for full startup
