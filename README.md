@@ -52,8 +52,8 @@ make demo
 
 ### Demo Timeline (~5 minutes total)
 - **Stage 1** (30s): Clone WebGoat v8.1.0 from GitHub
-- **Stage 2** (90s): Build application with Maven
-- **Stage 3** (90s): Run OWASP Dependency Check vulnerability scan
+- **Stage 2** (90s): Build application with Maven (~5 minutes initial run)
+- **Stage 3** (90s): Run OWASP Dependency Check vulnerability scan (~30 minutes initial run to update vulnerability database)
 - **Stage 4** (30s): Generate CycloneDX SBOM
 - **Stage 5** (30s): Upload to Dependency Track
 
