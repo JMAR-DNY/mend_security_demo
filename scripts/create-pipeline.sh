@@ -272,38 +272,105 @@ create_pipeline() {
 
             stage('🔍 OWASP Dependency Check') {
                 steps {
-                    echo '🔍 Running OWASP Dependency Check vulnerability scan...'
-                    echo 'ℹ️ This scans all dependencies for known security vulnerabilities'
-                    
-                    script {
-                        try {
-                            dependencyCheck(
-                                additionalArguments: '''
-                                    --format ALL
-                                    --enableRetired
-                                    --enableExperimental
-                                    --failOnCVSS 11
-                                ''',
-                                odcInstallation: 'dependency-check'
-                            )
-                            echo '✅ Dependency Check scan completed'
-                        } catch (Exception e) {
-                            echo "⚠️ Dependency Check found vulnerabilities: ${e.getMessage()}"
-                            echo "ℹ️ This is expected for WebGoat (intentionally vulnerable app)"
-                            echo "✅ Continuing pipeline - vulnerabilities will be tracked in Dependency Track"
-                        }
-                    }
+                    echo '🔍 Running OWASP Dependency Check via direct Java execution...'
+                    echo 'ℹ️ Bypassing script execution issues by calling Java directly'
                     
                     sh '''
-                        echo "📋 Scan Results Summary:"
-                        if [ -f "dependency-check-report.html" ]; then
-                            echo "✅ HTML report generated"
+                        echo "🔧 Setting up Dependency Check execution environment..."
+                        
+                        # Define tool directory
+                        TOOL_DIR="$JENKINS_HOME/tools/org.jenkinsci.plugins.DependencyCheck.tools.DependencyCheckInstallation/dependency-check"
+                        
+                        echo "📁 Tool directory: $TOOL_DIR"
+                        
+                        # Verify tool installation
+                        if [ ! -d "$TOOL_DIR" ]; then
+                            echo "❌ Dependency Check tool directory not found: $TOOL_DIR"
+                            exit 1
                         fi
-                        if [ -f "dependency-check-report.xml" ]; then
-                            echo "✅ XML report generated"  
+                        
+                        if [ ! -d "$TOOL_DIR/lib" ]; then
+                            echo "❌ Dependency Check lib directory not found: $TOOL_DIR/lib"
+                            exit 1
                         fi
-                        if [ -f "dependency-check-report.json" ]; then
-                            echo "✅ JSON report generated"
+                        
+                        # Check for main JAR file
+                        MAIN_JAR=$(find "$TOOL_DIR/lib" -name "dependency-check-cli-*.jar" | head -1)
+                        if [ -z "$MAIN_JAR" ]; then
+                            echo "❌ Dependency Check CLI JAR not found in $TOOL_DIR/lib"
+                            echo "📋 Available JARs:"
+                            ls -la "$TOOL_DIR/lib/" | grep dependency-check || echo "No dependency-check JARs found"
+                            exit 1
+                        fi
+                        
+                        echo "✅ Found main JAR: $MAIN_JAR"
+                        
+                        # Verify Java is available
+                        if ! command -v java >/dev/null 2>&1; then
+                            echo "❌ Java not found in PATH"
+                            echo "PATH: $PATH"
+                            exit 1
+                        fi
+                        
+                        JAVA_VERSION=$(java -version 2>&1 | head -1)
+                        echo "✅ Java available: $JAVA_VERSION"
+                        
+                        echo ""
+                        echo "🚀 Starting OWASP Dependency Check scan..."
+                        echo "📊 Scan target: $(pwd)"
+                        echo "📈 This may take 3-5 minutes for the first run..."
+                        echo ""
+                        
+                        # Execute Dependency Check directly via Java
+                        # Using the same options as the original plugin configuration
+                        java -Xmx4g \\
+                            -Dfile.encoding=UTF-8 \\
+                            -Djava.awt.headless=true \\
+                            -cp "$TOOL_DIR/lib/*" \\
+                            org.owasp.dependencycheck.App \\
+                            --scan . \\
+                            --format ALL \\
+                            --enableRetired \\
+                            --enableExperimental \\
+                            --failOnCVSS 11 \\
+                            --out . \\
+                            --project "WebGoat" \\
+                            --prettyPrint \\
+                            --log /tmp/dependency-check.log
+                        
+                        # Capture exit code but don't fail the build on vulnerabilities
+                        DC_EXIT_CODE=$?
+                        
+                        echo ""
+                        echo "📊 Dependency Check Results:"
+                        echo "Exit code: $DC_EXIT_CODE"
+                        
+                        # List generated reports
+                        if ls dependency-check-report.* >/dev/null 2>&1; then
+                            echo "✅ Reports generated successfully:"
+                            ls -la dependency-check-report.*
+                        else
+                            echo "⚠️ No reports found with standard naming"
+                            echo "📁 Checking for any XML/HTML/JSON files:"
+                            find . -maxdepth 1 \\( -name "*.xml" -o -name "*.html" -o -name "*.json" \\) -newer . 2>/dev/null || echo "No recent report files found"
+                        fi
+                        
+                        # Show log tail if available
+                        if [ -f /tmp/dependency-check.log ]; then
+                            echo ""
+                            echo "📋 Last 10 lines of dependency check log:"
+                            tail -10 /tmp/dependency-check.log
+                        fi
+                        
+                        # Don't fail the pipeline on vulnerabilities found (expected for WebGoat)
+                        if [ $DC_EXIT_CODE -ne 0 ]; then
+                            echo ""
+                            echo "⚠️ Dependency Check found vulnerabilities (exit code: $DC_EXIT_CODE)"
+                            echo "ℹ️ This is expected for WebGoat - intentionally vulnerable application"
+                            echo "✅ Continuing pipeline to upload results to Dependency Track"
+                        else
+                            echo ""
+                            echo "✅ Dependency Check scan completed successfully"
                         fi
                     '''
                 }
