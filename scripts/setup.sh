@@ -61,8 +61,8 @@ done
 
 # Apply certificate fix BEFORE feeds start downloading
 echo "🔐 Applying certificate fixes BEFORE vulnerability downloads begin..."
-if [ -f scripts/fix-dt-ssl.sh ]; then
-    ./scripts/fix-dt-ssl.sh
+if [ -f scripts/fix-dt-ssl-2.sh ]; then
+    ./scripts/fix-dt-ssl-2.sh
 fi
 
 # NOW wait for full service readiness
