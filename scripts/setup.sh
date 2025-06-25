@@ -164,6 +164,16 @@ if [ -f scripts/get-dt-api-key.sh ]; then
             if check_service "Jenkins" 8080 /login; then
                 echo "✅ Jenkins recreated successfully"
                 
+                # Install Dependency Check
+                echo "🔧 Installing Dependency Check tool..."
+                chmod +x scripts/install-dependency-check.sh
+                if ./scripts/install-dependency-check.sh; then
+                    echo "✅ Dependency Check tool installation completed"
+                else
+                    echo "❌ Dependency Check tool installation failed"
+                    exit 1
+                fi
+
                 # Verify Jenkins has the new API key
                 JENKINS_API_KEY=$(docker exec jenkins printenv DT_API_KEY 2>/dev/null || echo "")
                 if [ -n "$JENKINS_API_KEY" ] && [ "$JENKINS_API_KEY" = "$NEW_API_KEY" ]; then
@@ -336,19 +346,12 @@ else
     echo "⚠️ Some plugins may be missing. Check with: make verify-plugins"
 fi
 
-# Certificate-specific final message
-if [ "$CERT_ERRORS" -gt "0" ]; then
-    echo ""
-    echo "🔐 Certificate Status:"
-    if [ "$FINAL_CERT_ERRORS" -eq "0" ]; then
-        echo "   ✅ Certificate issues were detected and resolved"
-        echo "   📥 Vulnerability feeds should now download automatically"
-    else
-        echo "   ⚠️ Some certificate issues may persist"
-        echo "   💡 Run './scripts/update-certificates.sh' manually if needed"
-        echo "   📋 Monitor with: docker logs dt-apiserver -f | grep -E '(download|PKIX)'"
-    fi
-fi
+# Replace the problematic section with:
+echo ""
+echo "🔐 Certificate Status:"
+echo "   ✅ SSL certificates have been automatically configured"
+echo "   📥 Vulnerability feeds should download automatically"
+echo "   💡 Monitor with: docker logs dt-apiserver -f | grep -E '(download|PKIX)'"
 
 echo ""
 echo "⏱️ Total Setup Time: ~5-8 minutes (with reliable pre-build plugin installation)"

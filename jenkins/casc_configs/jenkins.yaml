@@ -39,10 +39,10 @@ tool:
     installations:
       - name: "dependency-check"
         properties:
-          - installSourceProperty:
+          - installSource:
               installers:
                 - dependencyCheckInstaller:
-                    id: "8.2.1" 
+                    id: "8.4.3"
 
 
 unclassified:
