@@ -22,7 +22,7 @@
 
 ### One-Command Setup
 ```bash
-git clone <repository-url>
+git clone https://github.com/JMAR-DNY/mend_security_demo
 cd mend-security-demo
 make setup
 ```
